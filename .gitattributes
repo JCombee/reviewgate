@@ -1,0 +1,7 @@
+# Houd regeleindes stabiel over platforms heen. De diff-parser leest wat git levert
+# en normaliseert zelf niets (§4), dus de repo moet er niet per platform anders uitzien.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
