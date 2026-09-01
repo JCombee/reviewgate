@@ -3,6 +3,13 @@
  * de web-bundel mag niets van de node-kant van core meenemen.
  */
 import type { IntralinePair } from "./diff/intraline.js";
+import type {
+  Comment,
+  CommentKind,
+  CommentScope,
+  Review,
+  Side,
+} from "./review/types.js";
 import type { DiffFile, FileStatus, ReviewScope } from "./types.js";
 
 export interface RepoSummary {
@@ -26,6 +33,7 @@ export interface FileSummary {
 }
 
 export interface ReviewSummary {
+  /** Sessie-id in de URL; de review zelf heeft zijn eigen, persistente id. */
   id: string;
   scope: ReviewScope;
   repo: RepoSummary;
@@ -34,6 +42,8 @@ export interface ReviewSummary {
   additions: number;
   deletions: number;
   changedLines: number;
+  /** De persistente review met comments, suggesties en rondes (§5). */
+  review: Review;
 }
 
 /**
@@ -75,6 +85,24 @@ export interface FileDetail {
   newLineCount: number;
 }
 
+/** Wat de UI meestuurt bij een nieuwe comment. */
+export interface CreateCommentBody {
+  scope: CommentScope;
+  kind?: CommentKind;
+  body: string;
+  path?: string;
+  side?: Side;
+  startLine?: number;
+  endLine?: number;
+  anchorSnippet?: string;
+  fromSuggestion?: string;
+}
+
+/** Server-sent events op `/api/review/:id/events` (§7). */
+export type ReviewEvent =
+  | { type: "review"; review: Review }
+  | { type: "ping" };
+
 export interface ApiError {
   error: string;
 }
@@ -88,3 +116,15 @@ export type {
   ReviewScope,
 } from "./types.js";
 export type { IntralinePair, IntralineSegment } from "./diff/intraline.js";
+export type {
+  Author,
+  Comment,
+  CommentKind,
+  CommentScope,
+  CommentStatus,
+  Reply,
+  Review,
+  Round,
+  Side,
+  Suggestion,
+} from "./review/types.js";

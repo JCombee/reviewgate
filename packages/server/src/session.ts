@@ -1,25 +1,32 @@
 import { randomUUID, randomBytes } from "node:crypto";
 import {
+  diffHash,
   intralineDiff,
+  ReviewStore,
   type Diff,
   type DiffOptions,
   type GitClient,
+  type Review,
   type ReviewScope,
 } from "@reviewgate/core";
-import type { FileDetail, FileSummary, ReviewSummary } from "@reviewgate/core/api";
+import type { FileDetail, FileSummary, ReviewEvent, ReviewSummary } from "@reviewgate/core/api";
 import { Highlighting, Palette } from "./highlight.js";
 
 export interface SessionInput {
   git: GitClient;
   scope: ReviewScope;
   options: DiffOptions;
+  /** Meegegeven door de hook in M3; bij een handmatige review leeg. */
+  commitMessage?: string | null;
+  claudeSessionId?: string | null;
+  transcriptPath?: string | null;
 }
 
+type Listener = (event: ReviewEvent) => void;
+
 /**
- * Eén review-sessie: de ingelezen diff plus alles wat de UI erover mag opvragen.
- *
- * In M1 leeft dit alleen in het geheugen. De persistente `Review` uit §5 komt in M2;
- * de vorm van `id` is nu al stabiel zodat de URL's dan niet veranderen.
+ * Eén review-sessie: de ingelezen diff, de persistente review en alles wat de UI
+ * erover mag opvragen of eraan mag wijzigen.
  */
 export class Session {
   readonly id = randomUUID();
@@ -28,6 +35,8 @@ export class Session {
   readonly createdAt = new Date().toISOString();
 
   #detailCache = new Map<number, FileDetail>();
+  #listeners = new Set<Listener>();
+  #review: Review;
 
   private constructor(
     readonly git: GitClient,
@@ -37,13 +46,30 @@ export class Session {
     readonly branch: string | null,
     readonly repoRoot: string,
     readonly highlighting: Highlighting,
-  ) {}
+    readonly store: ReviewStore,
+    review: Review,
+  ) {
+    this.#review = review;
+  }
 
   static async create(input: SessionInput, highlighting: Highlighting): Promise<Session> {
-    const [info, diff] = await Promise.all([
-      input.git.info(),
+    const info = await input.git.info();
+    const [diff, patch] = await Promise.all([
       input.git.diff(input.scope, input.options),
+      input.git.rawDiff(input.scope, input.options),
     ]);
+
+    const store = new ReviewStore(info.gitDir);
+    const review = await store.findOrCreate({
+      repoRoot: info.root,
+      branch: info.branch,
+      scope: input.scope,
+      diffHash: diffHash(patch),
+      commitMessage: input.commitMessage ?? null,
+      claudeSessionId: input.claudeSessionId ?? null,
+      transcriptPath: input.transcriptPath ?? null,
+    });
+
     return new Session(
       input.git,
       input.scope,
@@ -52,7 +78,38 @@ export class Session {
       info.branch,
       info.root,
       highlighting,
+      store,
+      review,
     );
+  }
+
+  get review(): Review {
+    return this.#review;
+  }
+
+  /**
+   * Slaat een gemuteerde review op en stuurt hem naar alle open SSE-verbindingen,
+   * zodat een tweede tabblad meteen bijloopt.
+   */
+  async commit(next: Review): Promise<Review> {
+    this.#review = await this.store.save(next);
+    this.#emit({ type: "review", review: this.#review });
+    return this.#review;
+  }
+
+  subscribe(listener: Listener): () => void {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
+  }
+
+  #emit(event: ReviewEvent): void {
+    for (const listener of this.#listeners) {
+      try {
+        listener(event);
+      } catch {
+        // Een kapotte verbinding mag de andere luisteraars niet meeslepen.
+      }
+    }
   }
 
   summary(): ReviewSummary {
@@ -79,6 +136,7 @@ export class Session {
       additions: this.diff.additions,
       deletions: this.diff.deletions,
       changedLines: this.diff.changedLines,
+      review: this.#review,
     };
   }
 

@@ -1,6 +1,20 @@
 import { timingSafeEqual } from "node:crypto";
-import { NodeGitClient, type DiffOptions, type ReviewScope } from "@reviewgate/core";
-import { Hono } from "hono";
+import {
+  addComment,
+  addReply,
+  deleteComment,
+  editComment,
+  NodeGitClient,
+  ReviewError,
+  setCommentStatus,
+  setEditedCommitMessage,
+  type DiffOptions,
+  type Review,
+  type ReviewScope,
+} from "@reviewgate/core";
+import type { CreateCommentBody } from "@reviewgate/core/api";
+import { Hono, type Context } from "hono";
+import { streamSSE } from "hono/streaming";
 import { findWebDist, readAsset } from "./assets.js";
 import { Highlighting } from "./highlight.js";
 import { Session } from "./session.js";
@@ -16,6 +30,9 @@ export interface CreateSessionBody {
   scope: ReviewScope;
   options?: DiffOptions;
   cwd?: string;
+  commitMessage?: string | null;
+  claudeSessionId?: string | null;
+  transcriptPath?: string | null;
 }
 
 export class SessionStore {
@@ -70,40 +87,66 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
       return c.json({ error: "ongeldige JSON" }, 400);
     }
 
-    const scope = body.scope ?? "staged";
     const git = await NodeGitClient.open(body.cwd ?? deps.repoRoot);
     const session = await Session.create(
-      { git, scope, options: body.options ?? {} },
+      {
+        git,
+        scope: body.scope ?? "staged",
+        options: body.options ?? {},
+        commitMessage: body.commitMessage ?? null,
+        claudeSessionId: body.claudeSessionId ?? null,
+        transcriptPath: body.transcriptPath ?? null,
+      },
       store.highlighting,
     );
     store.add(session);
 
-    return c.json({ id: session.id, token: session.token, path: `/r/${session.id}` });
+    return c.json({
+      id: session.id,
+      token: session.token,
+      path: `/r/${session.id}`,
+      reviewId: session.review.id,
+    });
   });
 
   // --- review-API ---------------------------------------------------------
-  const withSession = (c: {
-    req: { param: (k: string) => string | undefined; header: (k: string) => string | undefined; query: (k: string) => string | undefined };
-  }): Session | "notfound" | "forbidden" => {
+  /** Sessie ophalen en het token controleren; anders meteen het juiste antwoord. */
+  function resolve(c: Context): Session | Response {
     const id = c.req.param("id");
-    if (!id) return "notfound";
-    const session = store.get(id);
-    if (!session) return "notfound";
+    const session = id ? store.get(id) : undefined;
+    if (!session) return c.json({ error: "onbekende review" }, 404);
     const given = bearer(c.req.header("authorization")) ?? c.req.query("token");
-    return tokenMatches(session.token, given) ? session : "forbidden";
-  };
+    if (!tokenMatches(session.token, given)) return c.json({ error: "forbidden" }, 403);
+    return session;
+  }
+
+  const isSession = (v: Session | Response): v is Session => v instanceof Session;
+
+  /** Mutatie uitvoeren, opslaan, uitzenden en de nieuwe review teruggeven. */
+  async function mutate(
+    c: Context,
+    session: Session,
+    fn: () => Review | { review: Review },
+  ): Promise<Response> {
+    try {
+      const result = fn();
+      const next = "review" in result ? result.review : result;
+      const saved = await session.commit(next);
+      return c.json({ review: saved });
+    } catch (err) {
+      if (err instanceof ReviewError) return c.json({ error: err.message }, err.status);
+      throw err;
+    }
+  }
 
   app.get("/api/review/:id", (c) => {
-    const s = withSession(c);
-    if (s === "notfound") return c.json({ error: "onbekende review" }, 404);
-    if (s === "forbidden") return c.json({ error: "forbidden" }, 403);
-    return c.json(s.summary());
+    const s = resolve(c);
+    return isSession(s) ? c.json(s.summary()) : s;
   });
 
   app.get("/api/review/:id/files/:index", async (c) => {
-    const s = withSession(c);
-    if (s === "notfound") return c.json({ error: "onbekende review" }, 404);
-    if (s === "forbidden") return c.json({ error: "forbidden" }, 403);
+    const s = resolve(c);
+    if (!isSession(s)) return s;
 
     const index = Number.parseInt(c.req.param("index") ?? "", 10);
     if (Number.isNaN(index)) return c.json({ error: "ongeldige index" }, 400);
@@ -116,9 +159,8 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
   // Volledige bestandsinhoud, voor context-expansie wanneer highlighting is
   // overgeslagen en de tokens dus geen tekst bevatten (§7, §12).
   app.get("/api/review/:id/file", async (c) => {
-    const s = withSession(c);
-    if (s === "notfound") return c.json({ error: "onbekende review" }, 404);
-    if (s === "forbidden") return c.json({ error: "forbidden" }, 403);
+    const s = resolve(c);
+    if (!isSession(s)) return s;
 
     const path = c.req.query("path");
     const side = c.req.query("side");
@@ -128,6 +170,109 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     const content = await s.git.fileContent(path, side, s.scope);
     if (content === null) return c.json({ error: "bestand niet gevonden" }, 404);
     return c.json({ path, side, content });
+  });
+
+  app.post("/api/review/:id/comments", async (c) => {
+    const s = resolve(c);
+    if (!isSession(s)) return s;
+    const body = (await c.req.json().catch(() => null)) as CreateCommentBody | null;
+    if (!body) return c.json({ error: "ongeldige JSON" }, 400);
+    return mutate(c, s, () => addComment(s.review, body));
+  });
+
+  app.patch("/api/review/:id/comments/:cid", async (c) => {
+    const s = resolve(c);
+    if (!isSession(s)) return s;
+    const cid = c.req.param("cid") ?? "";
+    const body = (await c.req.json().catch(() => null)) as { body?: string } | null;
+    const text = body?.body;
+    if (typeof text !== "string") return c.json({ error: "body ontbreekt" }, 400);
+    return mutate(c, s, () => editComment(s.review, cid, text));
+  });
+
+  app.delete("/api/review/:id/comments/:cid", async (c) => {
+    const s = resolve(c);
+    if (!isSession(s)) return s;
+    const cid = c.req.param("cid") ?? "";
+    return mutate(c, s, () => deleteComment(s.review, cid));
+  });
+
+  app.post("/api/review/:id/comments/:cid/replies", async (c) => {
+    const s = resolve(c);
+    if (!isSession(s)) return s;
+    const cid = c.req.param("cid") ?? "";
+    const body = (await c.req.json().catch(() => null)) as { body?: string } | null;
+    const text = body?.body;
+    if (typeof text !== "string") return c.json({ error: "body ontbreekt" }, 400);
+    return mutate(c, s, () => addReply(s.review, cid, text));
+  });
+
+  app.post("/api/review/:id/comments/:cid/resolve", async (c) => {
+    const s = resolve(c);
+    if (!isSession(s)) return s;
+    const cid = c.req.param("cid") ?? "";
+    const body = (await c.req.json().catch(() => null)) as { resolved?: boolean } | null;
+    const resolved = body?.resolved ?? true;
+    return mutate(c, s, () => setCommentStatus(s.review, cid, resolved));
+  });
+
+  app.put("/api/review/:id/commit-message", async (c) => {
+    const s = resolve(c);
+    if (!isSession(s)) return s;
+    const body = (await c.req.json().catch(() => null)) as { message?: string | null } | null;
+    const message = body?.message ?? null;
+    return mutate(c, s, () => setEditedCommitMessage(s.review, message));
+  });
+
+  // SSE: elke mutatie stuurt de hele review na. Die is klein genoeg, en het
+  // scheelt een heel protocol aan deelmutaties dat toch weer uit de pas loopt.
+  app.get("/api/review/:id/events", (c) => {
+    const s = resolve(c);
+    if (!isSession(s)) return s;
+
+    return streamSSE(c, async (stream) => {
+      const queue: string[] = [];
+      let wake: (() => void) | null = null;
+      let running = true;
+
+      const unsubscribe = s.subscribe((event) => {
+        queue.push(JSON.stringify(event));
+        wake?.();
+      });
+
+      stream.onAbort(() => {
+        running = false;
+        unsubscribe();
+        wake?.();
+      });
+
+      // Direct de huidige stand sturen, zodat een verlate verbinding niets mist.
+      await stream.writeSSE({
+        event: "review",
+        data: JSON.stringify({ type: "review", review: s.review }),
+      });
+
+      while (running) {
+        if (queue.length === 0) {
+          // Wachten op de volgende mutatie, of op een hartslag zodat een dode
+          // verbinding niet eindeloos blijft hangen.
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+            setTimeout(resolve, 25_000);
+          });
+          wake = null;
+          if (!running) break;
+          if (queue.length === 0) {
+            await stream.writeSSE({ event: "ping", data: JSON.stringify({ type: "ping" }) });
+            continue;
+          }
+        }
+        const data = queue.shift();
+        if (data) await stream.writeSSE({ event: "review", data });
+      }
+
+      unsubscribe();
+    });
   });
 
   // --- web-UI -------------------------------------------------------------

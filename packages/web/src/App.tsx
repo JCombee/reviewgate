@@ -1,8 +1,10 @@
-import type { ReviewSummary } from "@reviewgate/core/api";
+import type { Review, ReviewSummary } from "@reviewgate/core/api";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fetchSummary, readContext } from "./api.js";
 import { FilePanel } from "./components/FilePanel.jsx";
+import { Overview } from "./components/Overview.jsx";
 import { Sidebar } from "./components/Sidebar.jsx";
+import { createReviewApi, subscribeToReview } from "./lib/reviewClient.js";
 
 type View = "unified" | "split";
 
@@ -18,6 +20,7 @@ const SCOPE_LABEL: Readonly<Record<string, string>> = {
 export function App() {
   const ctx = useMemo(() => readContext(), []);
   const [summary, setSummary] = useState<ReviewSummary | null>(null);
+  const [review, setReview] = useState<Review | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>(readView);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -28,11 +31,24 @@ export function App() {
     else fileRefs.current.delete(index);
   }, []);
 
+  const api = useMemo(() => (ctx ? createReviewApi(ctx, setReview) : null), [ctx]);
+
   useEffect(() => {
     if (!ctx) return;
-    fetchSummary(ctx).then(setSummary, (err: unknown) =>
-      setError(err instanceof Error ? err.message : String(err)),
+    fetchSummary(ctx).then(
+      (s) => {
+        setSummary(s);
+        setReview(s.review);
+      },
+      (err: unknown) => setError(err instanceof Error ? err.message : String(err)),
     );
+  }, [ctx]);
+
+  // Meelopen met mutaties uit een ander tabblad, en straks met de suggesties die
+  // tijdens de automatische pass binnendruppelen (§9).
+  useEffect(() => {
+    if (!ctx) return;
+    return subscribeToReview(ctx, setReview);
   }, [ctx]);
 
   useEffect(() => {
@@ -52,7 +68,7 @@ export function App() {
 
   const fileCount = summary?.files.length ?? 0;
 
-  // Toetsenbord: n/p door bestanden, j/k door hunks (§8).
+  // Toetsenbord: n/p door bestanden, j/k door hunks, u wisselt de weergave (§8).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -87,9 +103,10 @@ export function App() {
     );
   }
   if (error) return <Centered>Kon de review niet laden: {error}</Centered>;
-  if (!summary) return <Centered>laden…</Centered>;
+  if (!summary || !review || !api) return <Centered>laden…</Centered>;
 
   const empty = summary.files.length === 0;
+  const openCount = review.comments.filter((c) => c.status === "open").length;
 
   return (
     <div className="flex h-full flex-col">
@@ -107,6 +124,14 @@ export function App() {
           <span style={{ color: "var(--rg-status-added)" }}>+{summary.additions}</span>{" "}
           <span style={{ color: "var(--rg-status-deleted)" }}>−{summary.deletions}</span>
         </span>
+        {openCount > 0 && (
+          <>
+            <span className="text-[var(--rg-text-faint)]">·</span>
+            <span className="tabular-nums" style={{ color: "var(--rg-changes)" }}>
+              {openCount} openstaand
+            </span>
+          </>
+        )}
 
         <div
           className="ml-auto flex overflow-hidden rounded border border-[var(--rg-border)]"
@@ -132,8 +157,9 @@ export function App() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="w-72 shrink-0">
-          <Sidebar summary={summary} activeIndex={activeIndex} onSelect={goToFile} />
+        <aside className="flex w-80 shrink-0 flex-col overflow-y-auto border-r border-[var(--rg-border)] bg-[var(--rg-bg-sunken)]">
+          <Overview review={review} api={api} />
+          <Sidebar summary={summary} review={review} activeIndex={activeIndex} onSelect={goToFile} />
         </aside>
 
         <main className="min-w-0 flex-1 overflow-y-auto">
@@ -146,6 +172,8 @@ export function App() {
                 ctx={ctx}
                 file={f}
                 view={view}
+                review={review}
+                api={api}
                 registerRef={registerRef}
               />
             ))

@@ -224,3 +224,47 @@ body {
 :root[data-theme="dark"] .rg-tok {
   color: var(--rg-tok-d);
 }
+
+/* --- comments in de diff -------------------------------------------------- */
+
+.rg-gutter-clickable {
+  position: relative;
+  cursor: pointer;
+}
+
+/* Het plusje verschijnt pas bij hover: de goot is eerst een regelnummer. */
+.rg-plus {
+  position: absolute;
+  left: 0.25rem;
+  opacity: 0;
+  color: var(--rg-focus);
+  font-weight: 600;
+}
+
+.rg-gutter-clickable:hover .rg-plus {
+  opacity: 1;
+}
+
+.rg-gutter-selected {
+  background: var(--rg-focus);
+  color: var(--rg-bg-raised);
+}
+
+.rg-below {
+  font-family: var(--rg-font-ui);
+  font-size: var(--rg-size-ui);
+  line-height: 1.5;
+  white-space: normal;
+}
+
+/*
+  De rijen gebruiken `display: contents`, dus er is geen wrapper waar een
+  kindselector op kan aangrijpen: de goot krijgt zijn eigen, iets donkerdere tint
+  rechtstreeks.
+*/
+.rg-gutter.rg-line-add {
+  background: var(--rg-add-gutter);
+}
+.rg-gutter.rg-line-del {
+  background: var(--rg-del-gutter);
+}

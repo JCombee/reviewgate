@@ -16,3 +16,38 @@ export { GitError, runGit, splitLines, splitNul } from "./git/exec.js";
 export { EMPTY_TREE } from "./git/GitClient.js";
 export type { DiffOptions, GitClient, RepoInfo } from "./git/GitClient.js";
 export { NodeGitClient } from "./git/NodeGitClient.js";
+
+export { diffHash, normalizePatch } from "./review/hash.js";
+export { ReviewStore } from "./review/store.js";
+export {
+  addComment,
+  addReply,
+  deleteComment,
+  editComment,
+  ReviewError,
+  setCommentStatus,
+  setEditedCommitMessage,
+} from "./review/mutations.js";
+export type { NewCommentInput } from "./review/mutations.js";
+export { currentRound, openComments } from "./review/types.js";
+export type {
+  Author,
+  ChatMessage,
+  Comment,
+  CommentKind,
+  CommentScope,
+  CommentStatus,
+  Decision,
+  DismissedReason,
+  Reply,
+  Review,
+  ReviewStatus,
+  Round,
+  Severity,
+  Side,
+  Suggestion,
+  SuggestionStatus,
+} from "./review/types.js";
+
+/** Testhulp: een wegwerp-git-repo. Wordt door de server-integratietests gebruikt. */
+export { TestRepo } from "./git/testRepo.js";
