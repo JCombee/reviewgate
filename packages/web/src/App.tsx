@@ -132,6 +132,7 @@ export function App() {
 
   const empty = summary.files.length === 0;
   const openCount = review.comments.filter((c) => c.status === "open").length;
+  const round = review.rounds.length;
 
   return (
     <div className="flex h-full flex-col">
@@ -141,6 +142,12 @@ export function App() {
         <span className="text-[var(--rg-text-muted)]">
           {SCOPE_LABEL[summary.scope] ?? summary.scope}
         </span>
+        {round > 1 && (
+          <>
+            <span className="text-[var(--rg-text-faint)]">·</span>
+            <span className="text-[var(--rg-text-muted)]">ronde {round}</span>
+          </>
+        )}
         <span className="text-[var(--rg-text-faint)]">·</span>
         <span className="text-[var(--rg-text-muted)] tabular-nums">
           {summary.files.length} {summary.files.length === 1 ? "bestand" : "bestanden"}

@@ -86,3 +86,6 @@ export type {
   IncomingSuggestion,
   SuggestionCapConfig,
 } from "./review/suggestions.js";
+
+export { ANCHOR_WINDOW, reanchorComment, reanchorComments } from "./review/anchor.js";
+export type { AnchorOutcome, AnchorResult, FileLines } from "./review/anchor.js";

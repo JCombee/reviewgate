@@ -1,4 +1,4 @@
-import type { Review, Suggestion } from "@reviewgate/core/api";
+import type { Comment, Review, Suggestion } from "@reviewgate/core/api";
 import { useEffect, useState } from "react";
 import type { ReviewApi } from "../lib/reviewClient.js";
 import { CommentForm } from "./CommentForm.jsx";
@@ -41,6 +41,7 @@ export function Overview({
   const pendingSuggestions = globalSuggestions.filter((s) => s.status === "pending");
   const dismissedSuggestions = globalSuggestions.filter((s) => s.status === "dismissed");
   const messageComments = review.comments.filter((c) => c.scope === "commit_message");
+  const outdated = review.comments.filter((c) => c.status === "outdated");
 
   const saveMessage = async () => {
     await api.setCommitMessage(draft);
@@ -114,6 +115,8 @@ export function Overview({
       ))}
       <DismissedSuggestions suggestions={dismissedSuggestions} api={api} onDiscuss={onDiscuss} />
 
+      <OutdatedComments comments={outdated} api={api} />
+
       {adding !== null ? (
         <CommentForm
           placeholder={
@@ -134,6 +137,30 @@ export function Overview({
           + algemene opmerking
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * Comments waarvan de regel in deze ronde niet meer terug te vinden is (§5). Ze
+ * blijven zichtbaar — je wil kunnen zien wat je eerder opmerkte — maar tellen niet
+ * meer mee als openstaand.
+ */
+function OutdatedComments({ comments, api }: { comments: readonly Comment[]; api: ReviewApi }) {
+  const [open, setOpen] = useState(false);
+  if (comments.length === 0) return null;
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-[var(--rg-text-faint)]"
+        aria-expanded={open}
+      >
+        {open ? "▾" : "▸"} Verouderd ({comments.length})
+      </button>
+      {open && comments.map((c) => <CommentThread key={c.id} comment={c} api={api} />)}
     </div>
   );
 }

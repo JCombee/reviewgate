@@ -59,10 +59,13 @@ export class ReviewStore {
   }
 
   /**
-   * De open review voor deze diff, of een nieuwe. Dezelfde diff in dezelfde branch
-   * levert dezelfde review op, zodat comments een herstart van de server overleven.
-   * Meerdere rondes per review komen in M5; tot dan is een gewijzigde diff een
-   * nieuwe review.
+   * De review voor deze branch, met de juiste ronde erop.
+   *
+   * Dezelfde diff levert dezelfde review met dezelfde ronde op, zodat comments een
+   * herstart van de server overleven. Een gewijzigde diff op een review waarin al
+   * changes zijn gevraagd is ronde n+1 van diezelfde review: alleen zo kun je bij
+   * ronde 2 zien of je punten uit ronde 1 zijn opgevolgd (§5). Alleen na een
+   * approve begint er een nieuwe review.
    */
   async findOrCreate(input: {
     repoRoot: string;
@@ -72,18 +75,63 @@ export class ReviewStore {
     commitMessage?: string | null;
     claudeSessionId?: string | null;
     transcriptPath?: string | null;
-  }): Promise<Review> {
-    for (const review of await this.list()) {
-      if (review.status !== "open") continue;
-      if (review.branch !== input.branch) continue;
+  }): Promise<{ review: Review; newRound: boolean }> {
+    const candidates = (await this.list())
+      .filter((r) => r.branch === input.branch && r.status !== "approved" && r.status !== "abandoned")
+      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+
+    for (const review of candidates) {
       const round = review.rounds[review.rounds.length - 1];
-      if (!round || round.diffHash !== input.diffHash || round.scope !== input.scope) continue;
-      return review;
+      if (!round) continue;
+
+      // Exact dezelfde ronde: gewoon verder waar je was.
+      if (round.diffHash === input.diffHash && round.scope === input.scope && !round.decision) {
+        return { review, newRound: false };
+      }
+
+      // De code is aangepast na een "request changes": volgende ronde.
+      //
+      // Bewust nog niet opslaan. De aanroeper verankert eerst de comments op hun
+      // nieuwe regels en slaat dan één keer op; anders is er een moment waarop de
+      // nieuwe ronde al op schijf staat met de regelnummers van de vorige (§5).
+      if (round.decision === "request_changes") {
+        const next: Review = {
+          ...review,
+          status: "open",
+          rounds: [...review.rounds, this.#newRound(round.n + 1, input)],
+        };
+        return { review: next, newRound: true };
+      }
     }
 
     const now = new Date().toISOString();
-    const round: Round = {
-      n: 1,
+    const review = await this.save({
+      id: randomUUID(),
+      repoRoot: input.repoRoot,
+      branch: input.branch,
+      createdAt: now,
+      updatedAt: now,
+      rounds: [this.#newRound(1, input)],
+      comments: [],
+      suggestions: [],
+      chat: [],
+      status: "open",
+    });
+    return { review, newRound: false };
+  }
+
+  #newRound(
+    n: number,
+    input: {
+      scope: ReviewScope;
+      diffHash: string;
+      commitMessage?: string | null;
+      claudeSessionId?: string | null;
+      transcriptPath?: string | null;
+    },
+  ): Round {
+    return {
+      n,
       diffHash: input.diffHash,
       scope: input.scope,
       commitMessage: input.commitMessage ?? null,
@@ -94,18 +142,5 @@ export class ReviewStore {
       decidedAt: null,
       summary: null,
     };
-
-    return this.save({
-      id: randomUUID(),
-      repoRoot: input.repoRoot,
-      branch: input.branch,
-      createdAt: now,
-      updatedAt: now,
-      rounds: [round],
-      comments: [],
-      suggestions: [],
-      chat: [],
-      status: "open",
-    });
   }
 }

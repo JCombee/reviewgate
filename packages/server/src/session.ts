@@ -7,15 +7,19 @@ import {
   addSuggestions,
   closeOpenSuggestions,
   openComments,
+  reanchorComments,
   ReviewStore,
+  splitLines,
   suggestionCap,
   writeApproval,
   type Decision,
   type Diff,
   type DiffOptions,
+  type FileLines,
   type GitClient,
   type Review,
   type ReviewScope,
+  type Side,
   type Suggestion,
 } from "@reviewgate/core";
 import type {
@@ -78,7 +82,7 @@ export class Session {
     ]);
 
     const store = new ReviewStore(info.gitDir);
-    const review = await store.findOrCreate({
+    const { review, newRound } = await store.findOrCreate({
       repoRoot: info.root,
       branch: info.branch,
       scope: input.scope,
@@ -87,6 +91,12 @@ export class Session {
       claudeSessionId: input.claudeSessionId ?? null,
       transcriptPath: input.transcriptPath ?? null,
     });
+
+    // Bij een nieuwe ronde verschuiven de regelnummers; comments uit eerdere
+    // rondes moeten mee naar hun nieuwe plek, of verouderd raken (§5). De store
+    // heeft de ronde bewust nog niet weggeschreven, zodat de nieuwe ronde en de
+    // verplaatste comments in één keer op schijf komen.
+    const anchored = newRound ? await store.save(await reanchor(review, input.git, input.scope)) : review;
 
     const session = new Session(
       input.git,
@@ -97,7 +107,7 @@ export class Session {
       info.root,
       highlighting,
       store,
-      review,
+      anchored,
     );
     session.#agent = new ReviewAgent({
       repoRoot: info.root,
@@ -392,4 +402,32 @@ export class DecisionConflict extends Error {
     super("er staan nog comments open");
     this.name = "DecisionConflict";
   }
+}
+
+/**
+ * Zet de comments van een review over naar de nieuwe ronde. De bestandsinhoud wordt
+ * per pad één keer opgehaald en gecachet: een review kan tientallen comments in
+ * hetzelfde bestand hebben.
+ */
+async function reanchor(review: Review, git: GitClient, scope: ReviewScope): Promise<Review> {
+  const keys = new Set<string>();
+  for (const c of review.comments) {
+    if (c.scope === "line" && c.status === "open" && c.path) keys.add(`${c.side}:${c.path}`);
+  }
+  if (keys.size === 0) return review;
+
+  const cache = new Map<string, string[] | null>();
+  for (const key of keys) {
+    const [side, ...rest] = key.split(":");
+    const filePath = rest.join(":");
+    const content = await git.fileContent(filePath, side as Side, scope);
+    cache.set(key, content === null ? null : splitLines(content));
+  }
+
+  const files: FileLines = {
+    get: (filePath, side) => cache.get(`${side}:${filePath}`) ?? null,
+  };
+
+  const { comments } = reanchorComments(review.comments, files);
+  return { ...review, comments };
 }

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { TestRepo } from "../git/testRepo.js";
 import { addComment } from "./mutations.js";
 import { ReviewStore } from "./store.js";
+import type { Review } from "./types.js";
 
 let repos: TestRepo[] = [];
 
@@ -24,10 +25,24 @@ const input = {
   diffHash: "hash-1",
 };
 
+/** Sluit de huidige ronde af zoals `POST /decision` dat doet. */
+function withDecision(review: Review, decision: "approve" | "request_changes"): Review {
+  const rounds = [...review.rounds];
+  const last = rounds[rounds.length - 1];
+  if (!last) throw new Error("geen ronde");
+  rounds[rounds.length - 1] = { ...last, decision, decidedAt: new Date().toISOString() };
+  return {
+    ...review,
+    rounds,
+    status: decision === "approve" ? "approved" : "changes_requested",
+  };
+}
+
 describe("ReviewStore", () => {
   it("maakt een review met een eerste ronde", async () => {
     const { store } = await storeInTempRepo();
-    const review = await store.findOrCreate(input);
+    const { review, newRound } = await store.findOrCreate(input);
+    expect(newRound).toBe(false);
     expect(review.rounds).toHaveLength(1);
     expect(review.rounds[0]).toMatchObject({ n: 1, diffHash: "hash-1", scope: "staged" });
     expect(review.status).toBe("open");
@@ -35,45 +50,72 @@ describe("ReviewStore", () => {
 
   it("hergebruikt de review voor dezelfde diff, zodat comments een herstart overleven", async () => {
     const { store, gitDir } = await storeInTempRepo();
-    const first = await store.findOrCreate(input);
+    const { review: first } = await store.findOrCreate(input);
     const { review } = addComment(first, { scope: "global", body: "blijft bestaan" });
     await store.save(review);
 
     // Een nieuwe store staat gelijk aan een herstart van de server.
     const fresh = new ReviewStore(gitDir);
-    const again = await fresh.findOrCreate(input);
+    const { review: again, newRound } = await fresh.findOrCreate(input);
     expect(again.id).toBe(first.id);
+    expect(newRound).toBe(false);
     expect(again.comments).toHaveLength(1);
     expect(again.comments[0]?.body).toBe("blijft bestaan");
   });
 
-  it("begint een nieuwe review bij een andere diff", async () => {
+  it("begint ronde 2 in dezelfde review na een request changes", async () => {
     const { store } = await storeInTempRepo();
-    const first = await store.findOrCreate(input);
-    const second = await store.findOrCreate({ ...input, diffHash: "hash-2" });
-    expect(second.id).not.toBe(first.id);
+    const { review: first } = await store.findOrCreate(input);
+    const { review: withComment } = addComment(first, { scope: "global", body: "punt uit ronde 1" });
+    await store.save(withDecision(withComment, "request_changes"));
+
+    const { review: second, newRound } = await store.findOrCreate({
+      ...input,
+      diffHash: "hash-2",
+      commitMessage: "fix: opgevolgd",
+    });
+
+    // Zelfde review, zodat je kunt zien of je punten uit ronde 1 zijn opgevolgd.
+    expect(second.id).toBe(first.id);
+    expect(newRound).toBe(true);
+    expect(second.rounds).toHaveLength(2);
+    expect(second.rounds[1]).toMatchObject({ n: 2, diffHash: "hash-2", decision: null });
+    expect(second.status).toBe("open");
+    expect(second.comments).toHaveLength(1);
+    expect(second.comments[0]?.round).toBe(1);
+  });
+
+  it("begint een nieuwe review na een approve", async () => {
+    const { store } = await storeInTempRepo();
+    const { review: first } = await store.findOrCreate(input);
+    await store.save(withDecision(first, "approve"));
+
+    const { review: next } = await store.findOrCreate({ ...input, diffHash: "hash-2" });
+    expect(next.id).not.toBe(first.id);
+    expect(next.rounds).toHaveLength(1);
   });
 
   it("begint een nieuwe review op een andere branch", async () => {
     const { store } = await storeInTempRepo();
-    const first = await store.findOrCreate(input);
-    const other = await store.findOrCreate({ ...input, branch: "feature/x" });
+    const { review: first } = await store.findOrCreate(input);
+    const { review: other } = await store.findOrCreate({ ...input, branch: "feature/x" });
     expect(other.id).not.toBe(first.id);
-  });
-
-  it("hergebruikt een afgesloten review niet", async () => {
-    const { store } = await storeInTempRepo();
-    const first = await store.findOrCreate(input);
-    await store.save({ ...first, status: "approved" });
-    const next = await store.findOrCreate(input);
-    expect(next.id).not.toBe(first.id);
   });
 
   it("werkt updatedAt bij en laat createdAt staan", async () => {
     const { store } = await storeInTempRepo();
-    const review = await store.findOrCreate(input);
+    const { review } = await store.findOrCreate(input);
     const saved = await store.save({ ...review, status: "abandoned" });
     expect(saved.createdAt).toBe(review.createdAt);
     expect(Date.parse(saved.updatedAt)).toBeGreaterThanOrEqual(Date.parse(review.updatedAt));
+  });
+
+  it("raakt een verlaten review niet meer aan", async () => {
+    const { store } = await storeInTempRepo();
+    const { review: first } = await store.findOrCreate(input);
+    await store.save({ ...first, status: "abandoned" });
+
+    const { review: next } = await store.findOrCreate(input);
+    expect(next.id).not.toBe(first.id);
   });
 });

@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import type { IncomingSuggestion, Review, Severity } from "@reviewgate/core";
-import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
 /**
  * De read-only reviewer-assistent achter het chatpaneel en de automatische pass (§9).
@@ -24,6 +24,22 @@ export interface AgentContext {
   transcriptPath: string | null;
   /** Projectinstructies die de pass moet meewegen. */
   projectDocs: string;
+}
+
+/**
+ * De SDK is een zware module en de hook draait bij élke commit. Hem pas laden als
+ * er daadwerkelijk een vraag of een pass komt scheelt dat bij het openen van de
+ * gate; zonder chat betaal je er niets voor.
+ */
+type QueryFn = typeof import("@anthropic-ai/claude-agent-sdk").query;
+let queryFn: QueryFn | null = null;
+
+async function loadQuery(): Promise<QueryFn> {
+  if (!queryFn) {
+    const sdk = await import("@anthropic-ai/claude-agent-sdk");
+    queryFn = sdk.query;
+  }
+  return queryFn;
 }
 
 export class AgentUnavailable extends Error {
@@ -82,6 +98,7 @@ export class ReviewAgent {
   async ask(prompt: string, onToken?: (text: string) => void): Promise<string> {
     let answer = "";
     try {
+      const query = await loadQuery();
       for await (const message of query({ prompt, options: this.#options() })) {
         this.#trackSession(message);
         const chunk = partialText(message);
