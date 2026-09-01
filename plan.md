@@ -380,10 +380,11 @@ Bovenaan het "Overzicht"-tabblad, boven de globale comments, met twee onafhankel
 
 - **Bewerken.** De message die Claude uit het onderschepte commando wilde gebruiken staat in
   een textarea. Wat je erin typt wordt de message. Bij Approve schrijft de hook je versie naar
-  `.git/reviewgate/COMMIT_EDITMSG` en herschrijft hij het commando met `updatedInput` naar
-  `git commit -F <pad>` — dat vermijdt alle quoting-ellende met meerregelige messages en
-  aanhalingstekens. Bij Request changes gaat je versie mee in de feedback als de te gebruiken
-  message.
+  `.git/reviewgate/COMMIT_EDITMSG` en vraagt hij om één nieuwe poging met
+  `git commit -F <pad>` — een bestand in plaats van `-m` vermijdt alle quoting-ellende met
+  meerregelige messages en aanhalingstekens. Zie de noot bij §10 waarom het een tweede poging
+  is en geen herschrijving. Bij Request changes gaat je versie mee in de feedback als de te
+  gebruiken message.
 - **Becommentariëren.** Een comment-knop naast het veld plaatst een comment met
   `scope: 'commit_message'`. Die telt gewoon mee als openstaand en zet de knop dus op Request
   changes. Gebruik dit als je wil dat Claude de message zélf herziet ("verwijs naar het
@@ -615,11 +616,27 @@ message, daarna de comments erover.
 
 Bij Approve: `allow`. Er zijn per definitie geen openstaande punten meer. Wat er nog meegaat:
 
-- Is de message bewerkt, dan schrijft de hook hem naar `.git/reviewgate/COMMIT_EDITMSG` en
-  vervangt hij het commando via `updatedInput` door `git commit -F <pad>` (met de overige
-  vlaggen intact). Dit is het enige moment waarop ReviewGate het commando van de agent
-  herschrijft; log het naar `hook.log` en toon het in de UI in de bevestiging.
-- De samenvatting gaat mee via `additionalContext`, zodat Claude weet waarop is goedgekeurd.
+- De samenvatting gaat mee via `systemMessage`, zodat Claude weet waarop is goedgekeurd.
+
+### Noot: een PreToolUse-hook kan het commando niet herschrijven
+
+Bij het bouwen van M3 is dit tegen de docs aangehouden (https://code.claude.com/docs/en/hooks):
+een PreToolUse-hook kent alleen `permissionDecision` (`allow` of `deny`) met
+`permissionDecisionReason`, plus `systemMessage`. Er is geen `updatedInput` en geen andere
+manier om `tool_input` aan te passen vóór het commando loopt. Ook `additionalContext` bestaat
+niet voor dit event; dat is `systemMessage`.
+
+Daarom werkt de bewerkte commit message zo:
+
+1. Bij Approve mét een bewerkte message schrijft de hook hem naar
+   `.git/reviewgate/COMMIT_EDITMSG` en geeft hij `deny` met precies één instructie:
+   commit opnieuw met `git commit -F <dat pad>`.
+2. Het approval-artifact staat op dat moment al op schijf, dus die tweede poging loopt
+   zonder nieuwe review door. De hook herkent zijn eigen messagebestand en weet dan dat dit
+   de tweede poging is.
+
+Het kost één extra ronde door het model, maar alleen wanneer je de message daadwerkelijk
+hebt aangepast. Bij een gewone Approve is het gewoon `allow` en loopt de commit door.
 
 ---
 
@@ -711,7 +728,7 @@ Klaar als: comments overleven een herstart van de server en de juiste regel beho
 **M3 — De gate (eerste echt bruikbare versie)**
 Actiebalk met de knop-state-machine, `POST /decision` met server-side validatie, blokkerende
 hook, approval-artifact, bewerkbare en becommentarieerbare commit message inclusief
-`updatedInput`-herschrijving, feedback-rendering. Plugin-skelet met `hooks.json`.
+de `-F`-route voor een bewerkte message, feedback-rendering. Plugin-skelet met `hooks.json`.
 Klaar als: in een echte Claude Code sessie een commit blokkeert, jij comments plaatst,
 Request changes drukt, en Claude de feedback ontvangt en aan het werk gaat. Vanaf hier
 reviewt ReviewGate zijn eigen commits.
@@ -781,6 +798,10 @@ Deze zijn beantwoord en verwerkt in het plan. Ze staan hier zodat de reden zicht
 10. **Server is Hono** op `@hono/node-server`, met `streamSSE` voor de chat. Gekozen boven
     Express omdat het native TypeScript is, SSE ingebouwd heeft en geen platformspecifieke
     afhankelijkheden meebrengt.
+
+11. **De hook herschrijft het commando niet**, want dat kan een PreToolUse-hook niet: er is
+    geen . Een bewerkte commit message gaat via een messagebestand plus één
+    gerichte tweede poging, gedekt door het approval-artifact (zie de noot bij §10).
 
 ### Bij te stellen tijdens gebruik
 

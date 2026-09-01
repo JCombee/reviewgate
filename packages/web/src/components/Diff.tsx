@@ -162,6 +162,8 @@ function Gutter({
       className={`rg-gutter ${cls} ${selected ? "rg-gutter-selected" : ""} ${
         clickable ? "rg-gutter-clickable" : ""
       }`}
+      data-side={side}
+      {...(line !== null ? { "data-line": line } : {})}
       {...(clickable
         ? {
             role: "button",

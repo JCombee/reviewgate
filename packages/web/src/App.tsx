@@ -1,6 +1,7 @@
 import type { Review, ReviewSummary } from "@reviewgate/core/api";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fetchSummary, readContext } from "./api.js";
+import { ActionBar } from "./components/ActionBar.jsx";
 import { FilePanel } from "./components/FilePanel.jsx";
 import { Overview } from "./components/Overview.jsx";
 import { Sidebar } from "./components/Sidebar.jsx";
@@ -180,6 +181,8 @@ export function App() {
           )}
         </main>
       </div>
+
+      <ActionBar ctx={ctx} review={review} onDecided={setReview} />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { GitError } from "@reviewgate/core";
 import { UsageError } from "./args.js";
 import { cmdOpen } from "./commands/open.js";
+import { cmdHook } from "./commands/hook.js";
 import { cmdServe, cmdStatus } from "./commands/serve.js";
 
 const USAGE = `reviewgate — lokale code review gate
@@ -20,7 +21,7 @@ Gebruik:
 
   reviewgate serve            server starten zonder review
   reviewgate status           draaiende server en open reviews
-  reviewgate hook             (M3)
+  reviewgate hook             PreToolUse-hook: leest hook-JSON van stdin en blokkeert
 `;
 
 export async function main(argv: readonly string[]): Promise<number> {
@@ -46,8 +47,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       case "status":
         return await cmdStatus(rest, cwd);
       case "hook":
-        process.stderr.write('reviewgate: "hook" komt in M3.\n');
-        return 2;
+        return await cmdHook(cwd);
       default:
         process.stderr.write(`reviewgate: onbekend commando "${cmd}"\n\n${USAGE}`);
         return 2;

@@ -2,7 +2,10 @@ import { randomUUID, randomBytes } from "node:crypto";
 import {
   diffHash,
   intralineDiff,
+  openComments,
   ReviewStore,
+  writeApproval,
+  type Decision,
   type Diff,
   type DiffOptions,
   type GitClient,
@@ -112,6 +115,53 @@ export class Session {
     }
   }
 
+
+  /**
+   * Sluit de ronde af. De regel dat approve onmogelijk is met openstaande comments
+   * wordt hier afgedwongen, niet alleen in de UI (§8): de UI is niet de enige plek
+   * waar die regel mag leven.
+   */
+  async decide(decision: Decision, summary: string | null): Promise<Review> {
+    const open = openComments(this.#review);
+    if (decision === "approve" && open.length > 0) {
+      throw new DecisionConflict(open.map((c) => c.id));
+    }
+
+    const rounds = [...this.#review.rounds];
+    const last = rounds[rounds.length - 1];
+    if (!last) throw new Error("deze review heeft geen ronde");
+
+    const trimmed = summary?.trim();
+    rounds[rounds.length - 1] = {
+      ...last,
+      decision,
+      decidedAt: new Date().toISOString(),
+      summary: trimmed ? trimmed : null,
+    };
+
+    const next: Review = {
+      ...this.#review,
+      rounds,
+      status: decision === "approve" ? "approved" : "changes_requested",
+    };
+
+    // Eerst het approval-artifact, dan pas de review opslaan: de hook let op de
+    // review en mag pas doorlopen als het artifact er al is (§2).
+    if (decision === "approve") {
+      const info = await this.git.info();
+      await writeApproval(info.gitDir, {
+        diffHash: last.diffHash,
+        reviewId: next.id,
+        approvedAt: new Date().toISOString(),
+        claudeSessionId: last.claudeSessionId,
+        editedCommitMessage: last.editedCommitMessage,
+        summary: rounds[rounds.length - 1]?.summary ?? null,
+      });
+    }
+
+    return this.commit(next);
+  }
+
   summary(): ReviewSummary {
     const files: FileSummary[] = this.diff.files.map((f, index) => ({
       index,
@@ -201,4 +251,15 @@ function countLines(s: string): number {
     if (withoutTrailing.charCodeAt(i) === 10) n++;
   }
   return n;
+}
+
+/**
+ * Approve terwijl er nog comments open staan. De UI hoort dit te voorkomen, maar
+ * de server weigert het hoe dan ook — met de betreffende id's erbij (§8).
+ */
+export class DecisionConflict extends Error {
+  constructor(readonly openCommentIds: string[]) {
+    super("er staan nog comments open");
+    this.name = "DecisionConflict";
+  }
 }

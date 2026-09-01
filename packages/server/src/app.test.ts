@@ -1,4 +1,4 @@
-import { NodeGitClient, TestRepo } from "@reviewgate/core";
+import { diffHash, NodeGitClient, readApproval, TestRepo } from "@reviewgate/core";
 import type { Review, ReviewSummary } from "@reviewgate/core/api";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp, SessionStore } from "./app.js";
@@ -239,5 +239,78 @@ describe("events", () => {
     const text = new TextDecoder().decode(chunk.value);
     expect(text).toContain("hoort in Services");
     await reader.cancel();
+  });
+});
+
+describe("beslissing", () => {
+  const lineComment = {
+    scope: "line",
+    body: "hier ontbreekt iets",
+    path: "src/service.ts",
+    side: "new",
+    startLine: 2,
+  };
+
+  it("weigert approve zolang er een comment open staat", async () => {
+    await post(`/api/review/${session.id}/comments`, lineComment);
+
+    const res = await post(`/api/review/${session.id}/decision`, { decision: "approve" });
+    expect(res.status).toBe(409);
+    const body = await json<{ openCommentIds: string[] }>(res);
+    expect(body.openCommentIds).toHaveLength(1);
+  });
+
+  it("staat approve toe zodra de comment opgelost is", async () => {
+    const created = await json<{ review: Review }>(
+      await post(`/api/review/${session.id}/comments`, lineComment),
+    );
+    const id = created.review.comments[0]?.id as string;
+    await post(`/api/review/${session.id}/comments/${id}/resolve`, { resolved: true });
+
+    const res = await post(`/api/review/${session.id}/decision`, {
+      decision: "approve",
+      summary: "opzet klopt",
+    });
+    expect(res.status).toBe(200);
+    const { review } = await json<{ review: Review }>(res);
+    expect(review.status).toBe("approved");
+    expect(review.rounds[0]).toMatchObject({ decision: "approve", summary: "opzet klopt" });
+  });
+
+  it("schrijft bij approve een artifact voor precies deze diff", async () => {
+    await post(`/api/review/${session.id}/decision`, { decision: "approve" });
+
+    const patch = await session.git.rawDiff("staged", {});
+    const approval = await readApproval(`${repo.root}/.git`, diffHash(patch));
+    expect(approval).not.toBeNull();
+    expect(approval?.reviewId).toBe(session.review.id);
+
+    // Een andere diff heeft geen goedkeuring.
+    expect(await readApproval(`${repo.root}/.git`, diffHash("iets anders"))).toBeNull();
+  });
+
+  it("laat request_changes wél toe met openstaande comments", async () => {
+    await post(`/api/review/${session.id}/comments`, lineComment);
+    const res = await post(`/api/review/${session.id}/decision`, {
+      decision: "request_changes",
+      summary: "eerst de invalidatie",
+    });
+    expect(res.status).toBe(200);
+    const { review } = await json<{ review: Review }>(res);
+    expect(review.status).toBe("changes_requested");
+  });
+
+  it("weigert een onbekende beslissing", async () => {
+    const res = await post(`/api/review/${session.id}/decision`, { decision: "misschien" });
+    expect(res.status).toBe(400);
+  });
+
+  it("bewaart een lege samenvatting als null", async () => {
+    const res = await post(`/api/review/${session.id}/decision`, {
+      decision: "approve",
+      summary: "   ",
+    });
+    const { review } = await json<{ review: Review }>(res);
+    expect(review.rounds[0]?.summary).toBeNull();
   });
 });

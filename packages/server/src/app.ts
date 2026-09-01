@@ -17,7 +17,7 @@ import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { findWebDist, readAsset } from "./assets.js";
 import { Highlighting } from "./highlight.js";
-import { Session } from "./session.js";
+import { DecisionConflict, Session } from "./session.js";
 
 export interface AppDeps {
   /** Beheerstoken uit server.json; alleen de CLI mag hiermee sessies aanmaken. */
@@ -222,6 +222,31 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     const body = (await c.req.json().catch(() => null)) as { message?: string | null } | null;
     const message = body?.message ?? null;
     return mutate(c, s, () => setEditedCommitMessage(s.review, message));
+  });
+
+
+  app.post("/api/review/:id/decision", async (c) => {
+    const s = resolve(c);
+    if (!isSession(s)) return s;
+
+    const body = (await c.req.json().catch(() => null)) as {
+      decision?: string;
+      summary?: string | null;
+    } | null;
+    const decision = body?.decision;
+    if (decision !== "approve" && decision !== "request_changes") {
+      return c.json({ error: 'decision moet "approve" of "request_changes" zijn' }, 400);
+    }
+
+    try {
+      const review = await s.decide(decision, body?.summary ?? null);
+      return c.json({ review });
+    } catch (err) {
+      if (err instanceof DecisionConflict) {
+        return c.json({ error: err.message, openCommentIds: err.openCommentIds }, 409);
+      }
+      throw err;
+    }
   });
 
   // SSE: elke mutatie stuurt de hele review na. Die is klein genoeg, en het

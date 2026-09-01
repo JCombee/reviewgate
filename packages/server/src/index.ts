@@ -95,6 +95,8 @@ export interface CreatedSession {
   id: string;
   token: string;
   url: string;
+  /** Id van de persistente review; de hook wacht hierop (§7). */
+  reviewId: string;
 }
 
 /** Maakt een sessie aan op een draaiende server en geeft de review-URL terug. */
@@ -113,10 +115,16 @@ export async function createSession(
   if (!res.ok) {
     throw new Error(`kon geen review-sessie aanmaken: ${res.status} ${await res.text()}`);
   }
-  const data = (await res.json()) as { id: string; token: string; path: string };
+  const data = (await res.json()) as {
+    id: string;
+    token: string;
+    path: string;
+    reviewId: string;
+  };
   return {
     id: data.id,
     token: data.token,
+    reviewId: data.reviewId,
     url: `http://127.0.0.1:${rec.port}${data.path}?token=${encodeURIComponent(data.token)}`,
   };
 }

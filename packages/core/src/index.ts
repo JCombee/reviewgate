@@ -51,3 +51,16 @@ export type {
 
 /** Testhulp: een wegwerp-git-repo. Wordt door de server-integratietests gebruikt. */
 export { TestRepo } from "./git/testRepo.js";
+
+export { analyzeCommand, rewriteWithMessageFile, splitCommand } from "./hook/command.js";
+export type { CommitAnalysis } from "./hook/command.js";
+export { renderApproved, renderChangesRequested } from "./hook/feedback.js";
+export {
+  APPROVAL_TTL_MS,
+  consumeApproval,
+  readApproval,
+  writeApproval,
+} from "./review/approval.js";
+export type { Approval } from "./review/approval.js";
+export { waitForDecision } from "./hook/wait.js";
+export type { WaitOptions, WaitResult } from "./hook/wait.js";

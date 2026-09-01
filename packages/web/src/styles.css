@@ -268,3 +268,13 @@ body {
 .rg-gutter.rg-line-del {
   background: var(--rg-del-gutter);
 }
+
+/*
+  De primaire knop is de enige uitgesproken plek in het scherm. De wissel tussen
+  Approve en Request changes is alleen kleur en label — geen layout shift.
+*/
+.rg-primary {
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}

@@ -1,0 +1,6 @@
+{
+  "name": "reviewgate",
+  "version": "0.0.0",
+  "description": "Lokale, browser-gebaseerde code review gate die opent zodra Claude Code wil committen.",
+  "author": { "name": "ReviewGate" }
+}
