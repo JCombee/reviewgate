@@ -1,7 +1,8 @@
-import type { Review, ReviewSummary } from "@reviewgate/core/api";
+import type { PassStatus, Review, ReviewSummary, Suggestion } from "@reviewgate/core/api";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fetchSummary, readContext } from "./api.js";
 import { ActionBar } from "./components/ActionBar.jsx";
+import { ChatPanel } from "./components/ChatPanel.jsx";
 import { FilePanel } from "./components/FilePanel.jsx";
 import { Overview } from "./components/Overview.jsx";
 import { Sidebar } from "./components/Sidebar.jsx";
@@ -10,6 +11,7 @@ import { createReviewApi, subscribeToReview } from "./lib/reviewClient.js";
 type View = "unified" | "split";
 
 const VIEW_KEY = "reviewgate.view";
+const CHAT_KEY = "reviewgate.chat";
 
 const SCOPE_LABEL: Readonly<Record<string, string>> = {
   staged: "gestaged",
@@ -25,6 +27,10 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>(readView);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [chatOpen, setChatOpen] = useState(readChatOpen);
+  const [passStatus, setPassStatus] = useState<PassStatus>({ state: "idle" });
+  const [streaming, setStreaming] = useState<string | null>(null);
+  const [chatDraft, setChatDraft] = useState<string | null>(null);
 
   const fileRefs = useRef(new Map<number, HTMLElement>());
   const registerRef = useCallback((index: number, el: HTMLElement | null) => {
@@ -40,31 +46,49 @@ export function App() {
       (s) => {
         setSummary(s);
         setReview(s.review);
+        setPassStatus(s.passStatus);
       },
       (err: unknown) => setError(err instanceof Error ? err.message : String(err)),
     );
   }, [ctx]);
 
-  // Meelopen met mutaties uit een ander tabblad, en straks met de suggesties die
-  // tijdens de automatische pass binnendruppelen (§9).
+  // Meelopen met mutaties uit een ander tabblad, met de tokens van een lopend
+  // chatantwoord en met de suggesties die tijdens de pass binnendruppelen (§9).
   useEffect(() => {
     if (!ctx) return;
-    return subscribeToReview(ctx, setReview);
+    return subscribeToReview(ctx, {
+      onReview: (next) => {
+        setReview(next);
+        // Het antwoord staat nu in de review zelf; de losse stream mag weg.
+        setStreaming(null);
+      },
+      onChatToken: (text) => setStreaming((prev) => (prev ?? "") + text),
+      onPass: setPassStatus,
+    });
   }, [ctx]);
 
   useEffect(() => {
     try {
       window.localStorage.setItem(VIEW_KEY, view);
+      window.localStorage.setItem(CHAT_KEY, chatOpen ? "1" : "0");
     } catch {
       // Privémodus of geblokkeerde opslag: de keuze geldt dan alleen deze sessie.
     }
-  }, [view]);
+  }, [view, chatOpen]);
 
   const goToFile = useCallback((index: number) => {
     const el = fileRefs.current.get(index);
     if (!el) return;
     el.scrollIntoView({ block: "start", behavior: "auto" });
     setActiveIndex(index);
+  }, []);
+
+  const onDiscuss = useCallback((suggestion: Suggestion) => {
+    const where = suggestion.path
+      ? `${suggestion.path}${suggestion.startLine ? `:${suggestion.startLine}` : ""}`
+      : "de wijziging als geheel";
+    setChatDraft(`Over dit voorstel bij ${where}: "${suggestion.body}" — klopt dat?`);
+    setChatOpen(true);
   }, []);
 
   const fileCount = summary?.files.length ?? 0;
@@ -134,32 +158,42 @@ export function App() {
           </>
         )}
 
-        <div
-          className="ml-auto flex overflow-hidden rounded border border-[var(--rg-border)]"
-          role="group"
-          aria-label="Weergave"
-        >
-          {(["unified", "split"] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              aria-pressed={view === v}
-              className={`px-2 py-0.5 ${
-                view === v
-                  ? "bg-[var(--rg-bg-sunken)] text-[var(--rg-text)]"
-                  : "text-[var(--rg-text-muted)]"
-              }`}
-            >
-              {v === "unified" ? "Unified" : "Split"}
-            </button>
-          ))}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setChatOpen((v) => !v)}
+            aria-pressed={chatOpen}
+            className="rounded border border-[var(--rg-border)] px-2 py-0.5 text-[var(--rg-text-muted)]"
+          >
+            Gesprek
+          </button>
+          <div
+            className="flex overflow-hidden rounded border border-[var(--rg-border)]"
+            role="group"
+            aria-label="Weergave"
+          >
+            {(["unified", "split"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                aria-pressed={view === v}
+                className={`px-2 py-0.5 ${
+                  view === v
+                    ? "bg-[var(--rg-bg-sunken)] text-[var(--rg-text)]"
+                    : "text-[var(--rg-text-muted)]"
+                }`}
+              >
+                {v === "unified" ? "Unified" : "Split"}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-80 shrink-0 flex-col overflow-y-auto border-r border-[var(--rg-border)] bg-[var(--rg-bg-sunken)]">
-          <Overview review={review} api={api} />
+          <Overview review={review} api={api} onDiscuss={onDiscuss} />
           <Sidebar summary={summary} review={review} activeIndex={activeIndex} onSelect={goToFile} />
         </aside>
 
@@ -176,10 +210,25 @@ export function App() {
                 review={review}
                 api={api}
                 registerRef={registerRef}
+                onDiscuss={onDiscuss}
               />
             ))
           )}
         </main>
+
+        {chatOpen && (
+          <aside className="w-96 shrink-0">
+            <ChatPanel
+              ctx={ctx}
+              review={review}
+              api={api}
+              streaming={streaming}
+              passStatus={passStatus}
+              draft={chatDraft}
+              onDraftUsed={() => setChatDraft(null)}
+            />
+          </aside>
+        )}
       </div>
 
       <ActionBar ctx={ctx} review={review} onDecided={setReview} />
@@ -208,6 +257,14 @@ function readView(): View {
     return window.localStorage.getItem(VIEW_KEY) === "split" ? "split" : "unified";
   } catch {
     return "unified";
+  }
+}
+
+function readChatOpen(): boolean {
+  try {
+    return window.localStorage.getItem(CHAT_KEY) !== "0";
+  } catch {
+    return true;
   }
 }
 

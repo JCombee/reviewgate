@@ -69,6 +69,6 @@ export class TestRepo {
 
   async cleanup(): Promise<void> {
     // Windows houdt packfiles soms nog even vast; maxRetries vangt dat af.
-    await fs.rm(this.root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    await fs.rm(this.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 }

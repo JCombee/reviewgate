@@ -64,3 +64,25 @@ export {
 export type { Approval } from "./review/approval.js";
 export { waitForDecision } from "./hook/wait.js";
 export type { WaitOptions, WaitResult } from "./hook/wait.js";
+
+export {
+  acceptSuggestion,
+  addSuggestions,
+  applyCap,
+  closeOpenSuggestions,
+  DEFAULT_CAP,
+  DEFAULT_DEDUPE,
+  dismissSuggestion,
+  findDuplicate,
+  normalize,
+  reopenSuggestion,
+  similarity,
+  suggestionCap,
+} from "./review/suggestions.js";
+export type {
+  AddSuggestionsResult,
+  DedupeConfig,
+  DuplicateMatch,
+  IncomingSuggestion,
+  SuggestionCapConfig,
+} from "./review/suggestions.js";

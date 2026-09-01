@@ -1,10 +1,13 @@
 import { timingSafeEqual } from "node:crypto";
 import {
+  acceptSuggestion,
   addComment,
   addReply,
   deleteComment,
+  dismissSuggestion,
   editComment,
   NodeGitClient,
+  reopenSuggestion,
   ReviewError,
   setCommentStatus,
   setEditedCommitMessage,
@@ -100,6 +103,9 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
       store.highlighting,
     );
     store.add(session);
+
+    // De automatische pass loopt naast het lezen en blokkeert niets (§9).
+    if (process.env["REVIEWGATE_AUTO_REVIEW"] !== "0") void session.runReviewPass();
 
     return c.json({
       id: session.id,
@@ -224,6 +230,78 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     return mutate(c, s, () => setEditedCommitMessage(s.review, message));
   });
 
+
+  // --- chat en suggesties (§9) --------------------------------------------
+  app.post("/api/review/:id/chat", async (c) => {
+    const s = resolve(c);
+    if (!isSession(s)) return s;
+    const body = (await c.req.json().catch(() => null)) as { message?: string } | null;
+    const message = body?.message;
+    if (typeof message !== "string" || message.trim() === "") {
+      return c.json({ error: "message ontbreekt" }, 400);
+    }
+    try {
+      const review = await s.chat(message);
+      return c.json({ review });
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 503);
+    }
+  });
+
+  // De pass loopt op de achtergrond: het antwoord komt meteen, de bevindingen
+  // druppelen via SSE binnen (§9).
+  app.post("/api/review/:id/pass", (c) => {
+    const s = resolve(c);
+    if (!isSession(s)) return s;
+    void s.runReviewPass();
+    return c.json({ started: true });
+  });
+
+  app.post("/api/review/:id/suggestions/:sid/accept", async (c) => {
+    const s = resolve(c);
+    if (!isSession(s)) return s;
+    const sid = c.req.param("sid") ?? "";
+    const body = (await c.req.json().catch(() => null)) as { body?: string } | null;
+
+    const suggestion = s.review.suggestions.find((x) => x.id === sid);
+    if (!suggestion) return c.json({ error: "onbekend voorstel" }, 404);
+
+    try {
+      // De comment die eruit komt heeft author "user": jij hebt hem goedgekeurd,
+      // dus jij bent de auteur. Pas dán telt hij mee en gaat hij naar Claude (§9).
+      const { review, comment } = addComment(s.review, {
+        scope: suggestion.scope,
+        body: body?.body ?? suggestion.body,
+        fromSuggestion: suggestion.id,
+        ...(suggestion.path !== undefined ? { path: suggestion.path } : {}),
+        ...(suggestion.side !== undefined ? { side: suggestion.side } : {}),
+        ...(suggestion.startLine !== undefined ? { startLine: suggestion.startLine } : {}),
+        ...(suggestion.endLine !== undefined ? { endLine: suggestion.endLine } : {}),
+        ...(suggestion.anchorSnippet !== undefined
+          ? { anchorSnippet: suggestion.anchorSnippet }
+          : {}),
+      });
+      const saved = await s.commit(acceptSuggestion(review, sid, comment.id));
+      return c.json({ review: saved });
+    } catch (err) {
+      if (err instanceof ReviewError) return c.json({ error: err.message }, err.status);
+      throw err;
+    }
+  });
+
+  app.post("/api/review/:id/suggestions/:sid/dismiss", async (c) => {
+    const s = resolve(c);
+    if (!isSession(s)) return s;
+    const sid = c.req.param("sid") ?? "";
+    return c.json({ review: await s.commit(dismissSuggestion(s.review, sid)) });
+  });
+
+  app.post("/api/review/:id/suggestions/:sid/reopen", async (c) => {
+    const s = resolve(c);
+    if (!isSession(s)) return s;
+    const sid = c.req.param("sid") ?? "";
+    return c.json({ review: await s.commit(reopenSuggestion(s.review, sid)) });
+  });
 
   app.post("/api/review/:id/decision", async (c) => {
     const s = resolve(c);

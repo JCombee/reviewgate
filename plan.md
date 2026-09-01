@@ -555,9 +555,15 @@ UI zichtbaar, en ze onderdrukken herhaling in latere rondes:
   woord; de deduplicatie neemt alleen het klikwerk weg.
 - Matching is deterministisch en unit-testbaar, geen model-oordeel. Normaliseer de tekst
   (lowercase, leestekens en regelnummers eruit, whitespace inklappen) en vergelijk met
-  Jaccard-similariteit over woord-trigrammen. Duplicaat als: zelfde bestand én overlappende
+  Jaccard-similariteit over de woorden. Duplicaat als: zelfde bestand én overlappende
   regelrange én similariteit ≥ 0.6, óf similariteit ≥ 0.8 ongeacht locatie. Drempels
   configureerbaar, en log bij elke automatische afwijzing de score zodat je ze kunt bijstellen.
+
+  Hier stond eerst "woord-trigrammen". Dat is bij het bouwen van M4 aangepast: trigrammen zijn
+  veel te streng voor deze drempels. "deze fetch heeft geen error-afhandeling" versus "deze
+  fetch heeft nog steeds geen error-afhandeling" komt op trigrammen uit op 0,25 — ruim onder
+  de 0,6, dus de deduplicatie zou vrijwel nooit aanslaan. Op woordniveau is datzelfde paar
+  0,75, en dan doen de drempels wat ze horen te doen.
 - Alleen voorstellen die _jij_ hebt afgewezen (`dismissedReason: 'user'`) en eerder automatisch
   afgewezen duplicaten onderdrukken herhaling. Voorstellen die bij de beslissing zijn gesloten
   omdat je er simpelweg niet aan toekwam (`round_closed`) niet — die had je nooit beoordeeld,

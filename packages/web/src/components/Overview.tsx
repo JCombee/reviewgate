@@ -1,8 +1,9 @@
-import type { Review } from "@reviewgate/core/api";
+import type { Review, Suggestion } from "@reviewgate/core/api";
 import { useEffect, useState } from "react";
 import type { ReviewApi } from "../lib/reviewClient.js";
 import { CommentForm } from "./CommentForm.jsx";
 import { CommentThread } from "./CommentThread.jsx";
+import { DismissedSuggestions, SuggestionCard } from "./SuggestionCard.jsx";
 
 /**
  * Het overzicht boven de bestandenlijst: de commit message en de globale comments.
@@ -11,7 +12,15 @@ import { CommentThread } from "./CommentThread.jsx";
  * elkaar (§8): jij kunt hem goedzetten, óf Claude vragen hem zelf te herzien, of
  * allebei.
  */
-export function Overview({ review, api }: { review: Review; api: ReviewApi }) {
+export function Overview({
+  review,
+  api,
+  onDiscuss,
+}: {
+  review: Review;
+  api: ReviewApi;
+  onDiscuss: (suggestion: Suggestion) => void;
+}) {
   const round = review.rounds[review.rounds.length - 1];
   const original = round?.commitMessage ?? null;
   const edited = round?.editedCommitMessage ?? null;
@@ -28,6 +37,9 @@ export function Overview({ review, api }: { review: Review; api: ReviewApi }) {
   }, [edited, original]);
 
   const globals = review.comments.filter((c) => c.scope === "global");
+  const globalSuggestions = review.suggestions.filter((s) => s.scope === "global");
+  const pendingSuggestions = globalSuggestions.filter((s) => s.status === "pending");
+  const dismissedSuggestions = globalSuggestions.filter((s) => s.status === "dismissed");
   const messageComments = review.comments.filter((c) => c.scope === "commit_message");
 
   const saveMessage = async () => {
@@ -96,6 +108,11 @@ export function Overview({ review, api }: { review: Review; api: ReviewApi }) {
       {globals.map((c) => (
         <CommentThread key={c.id} comment={c} api={api} />
       ))}
+
+      {pendingSuggestions.map((s) => (
+        <SuggestionCard key={s.id} suggestion={s} api={api} onDiscuss={onDiscuss} />
+      ))}
+      <DismissedSuggestions suggestions={dismissedSuggestions} api={api} onDiscuss={onDiscuss} />
 
       {adding !== null ? (
         <CommentForm

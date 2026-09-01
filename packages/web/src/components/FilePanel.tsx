@@ -1,4 +1,11 @@
-import type { Comment, FileDetail, FileSummary, Review, Side } from "@reviewgate/core/api";
+import type {
+  Comment,
+  FileDetail,
+  FileSummary,
+  Review,
+  Side,
+  Suggestion,
+} from "@reviewgate/core/api";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fetchFile, type Ctx } from "../api.js";
 import { linesFromTokens } from "../lib/code.js";
@@ -14,6 +21,7 @@ import { CommentForm } from "./CommentForm.jsx";
 import { CommentThread } from "./CommentThread.jsx";
 import { SplitRows, UnifiedRows, type LineSelection } from "./Diff.jsx";
 import { StatusBadge } from "./StatusBadge.jsx";
+import { DismissedSuggestions, SuggestionCard } from "./SuggestionCard.jsx";
 
 /** Boven dit aantal gewijzigde regels staat een bestand dichtgeklapt (§12). */
 const LARGE_FILE_LINES = 2000;
@@ -25,9 +33,18 @@ export interface FilePanelProps {
   review: Review;
   api: ReviewApi;
   registerRef: (index: number, el: HTMLElement | null) => void;
+  onDiscuss: (suggestion: Suggestion) => void;
 }
 
-export function FilePanel({ ctx, file, view, review, api, registerRef }: FilePanelProps) {
+export function FilePanel({
+  ctx,
+  file,
+  view,
+  review,
+  api,
+  registerRef,
+  onDiscuss,
+}: FilePanelProps) {
   const isLarge = file.additions + file.deletions > LARGE_FILE_LINES;
   const [open, setOpen] = useState(!isLarge);
   const [detail, setDetail] = useState<FileDetail | null>(null);
@@ -180,6 +197,22 @@ export function FilePanel({ ctx, file, view, review, api, registerRef }: FilePan
     return map;
   }, [review.comments, file.path]);
 
+  /** Voorstellen van dit bestand, op dezelfde manier verankerd als comments. */
+  const suggestionsByAnchor = useMemo(() => {
+    const map = new Map<string, Suggestion[]>();
+    for (const s of review.suggestions) {
+      if (s.scope !== "line" || s.path !== file.path || !s.side) continue;
+      if (s.status === "accepted") continue;
+      const line = s.endLine ?? s.startLine;
+      if (line === undefined) continue;
+      const key = `${s.side}:${line}`;
+      const list = map.get(key);
+      if (list) list.push(s);
+      else map.set(key, [s]);
+    }
+    return map;
+  }, [review.suggestions, file.path]);
+
   const anchorSnippet = useCallback(
     (side: Side, line: number): string | undefined => {
       const lines =
@@ -193,15 +226,23 @@ export function FilePanel({ ctx, file, view, review, api, registerRef }: FilePan
 
   const below = useCallback(
     (side: Side, line: number): ReactNode => {
-      const threads = commentsByAnchor.get(`${side}:${line}`) ?? [];
+      const key = `${side}:${line}`;
+      const threads = commentsByAnchor.get(key) ?? [];
+      const suggestions = suggestionsByAnchor.get(key) ?? [];
+      const pending = suggestions.filter((s) => s.status === "pending");
+      const dismissed = suggestions.filter((s) => s.status === "dismissed");
       const showForm = form !== null && form.side === side && form.end === line;
-      if (threads.length === 0 && !showForm) return null;
+      if (threads.length === 0 && suggestions.length === 0 && !showForm) return null;
 
       return (
         <>
           {threads.map((c) => (
             <CommentThread key={c.id} comment={c} api={api} />
           ))}
+          {pending.map((s) => (
+            <SuggestionCard key={s.id} suggestion={s} api={api} onDiscuss={onDiscuss} />
+          ))}
+          <DismissedSuggestions suggestions={dismissed} api={api} onDiscuss={onDiscuss} />
           {showForm && (
             <CommentForm
               placeholder={
@@ -232,7 +273,7 @@ export function FilePanel({ ctx, file, view, review, api, registerRef }: FilePan
         </>
       );
     },
-    [commentsByAnchor, form, api, file.path, anchorSnippet],
+    [commentsByAnchor, suggestionsByAnchor, form, api, file.path, anchorSnippet, onDiscuss],
   );
 
   const fileCommentCount = review.comments.filter(

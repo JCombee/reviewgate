@@ -1,4 +1,4 @@
-import type { CreateCommentBody, Review, ReviewEvent } from "@reviewgate/core/api";
+import type { CreateCommentBody, PassStatus, Review, ReviewEvent } from "@reviewgate/core/api";
 import type { Ctx } from "../api.js";
 
 /** Alle mutaties op de review, in één object dat door de componenten gaat. */
@@ -9,6 +9,12 @@ export interface ReviewApi {
   reply: (id: string, body: string) => Promise<void>;
   setResolved: (id: string, resolved: boolean) => Promise<void>;
   setCommitMessage: (message: string | null) => Promise<void>;
+  /** Een voorstel overnemen: het wordt jouw comment, en pas dan telt het mee (§9). */
+  acceptSuggestion: (id: string, body?: string) => Promise<void>;
+  dismissSuggestion: (id: string) => Promise<void>;
+  reopenSuggestion: (id: string) => Promise<void>;
+  chat: (message: string) => Promise<void>;
+  restartPass: () => Promise<void>;
 }
 
 async function send(
@@ -45,6 +51,18 @@ export function createReviewApi(ctx: Ctx, onReview: (review: Review) => void): R
     reply: (id, body) => run(`/comments/${id}/replies`, "POST", { body }),
     setResolved: (id, resolved) => run(`/comments/${id}/resolve`, "POST", { resolved }),
     setCommitMessage: (message) => run("/commit-message", "PUT", { message }),
+    acceptSuggestion: (id, body) =>
+      run(`/suggestions/${id}/accept`, "POST", body === undefined ? {} : { body }),
+    dismissSuggestion: (id) => run(`/suggestions/${id}/dismiss`, "POST", {}),
+    reopenSuggestion: (id) => run(`/suggestions/${id}/reopen`, "POST", {}),
+    chat: (message) => run("/chat", "POST", { message }),
+    restartPass: async () => {
+      // De pass antwoordt meteen en levert zijn bevindingen daarna via SSE.
+      await fetch(`/api/review/${ctx.id}/pass`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${ctx.token}` },
+      });
+    },
   };
 }
 
@@ -53,18 +71,33 @@ export function createReviewApi(ctx: Ctx, onReview: (review: Review) => void): R
  * tabblad mee, en straks ook de suggesties die tijdens de automatische pass
  * binnendruppelen (§9).
  */
-export function subscribeToReview(ctx: Ctx, onReview: (review: Review) => void): () => void {
+export interface ReviewEventHandlers {
+  onReview: (review: Review) => void;
+  /** Eén stukje van een lopend chatantwoord. */
+  onChatToken?: (text: string) => void;
+  onPass?: (status: PassStatus) => void;
+}
+
+export function subscribeToReview(ctx: Ctx, handlers: ReviewEventHandlers): () => void {
   const source = new EventSource(
     `/api/review/${ctx.id}/events?token=${encodeURIComponent(ctx.token)}`,
   );
+
   const handle = (e: MessageEvent<string>) => {
+    let event: ReviewEvent;
     try {
-      const event = JSON.parse(e.data) as ReviewEvent;
-      if (event.type === "review") onReview(event.review);
+      event = JSON.parse(e.data) as ReviewEvent;
     } catch {
       // Een onleesbaar bericht overslaan is beter dan de stream opgeven.
+      return;
     }
+    if (event.type === "review") handlers.onReview(event.review);
+    else if (event.type === "chat-token") handlers.onChatToken?.(event.text);
+    else if (event.type === "pass") handlers.onPass?.(event.status);
   };
-  source.addEventListener("review", handle as EventListener);
+
+  for (const name of ["review", "chat-token", "pass"]) {
+    source.addEventListener(name, handle as EventListener);
+  }
   return () => source.close();
 }

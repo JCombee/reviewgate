@@ -44,6 +44,8 @@ export interface ReviewSummary {
   changedLines: number;
   /** De persistente review met comments, suggesties en rondes (§5). */
   review: Review;
+  /** Stand van de automatische pass op het moment van laden. */
+  passStatus: PassStatus;
 }
 
 /**
@@ -98,9 +100,18 @@ export interface CreateCommentBody {
   fromSuggestion?: string;
 }
 
+/** Stand van de automatische eerste pass, voor de kopbalk (§9). */
+export type PassStatus =
+  | { state: "idle" }
+  | { state: "running" }
+  | { state: "done"; count: number }
+  | { state: "failed"; error: string };
+
 /** Server-sent events op `/api/review/:id/events` (§7). */
 export type ReviewEvent =
   | { type: "review"; review: Review }
+  | { type: "chat-token"; text: string }
+  | { type: "pass"; status: PassStatus }
   | { type: "ping" };
 
 export interface ApiError {
@@ -118,6 +129,7 @@ export type {
 export type { IntralinePair, IntralineSegment } from "./diff/intraline.js";
 export type {
   Author,
+  ChatMessage,
   Comment,
   CommentKind,
   CommentScope,
@@ -125,6 +137,8 @@ export type {
   Reply,
   Review,
   Round,
+  Severity,
   Side,
   Suggestion,
+  SuggestionStatus,
 } from "./review/types.js";

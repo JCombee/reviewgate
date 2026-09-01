@@ -1,9 +1,14 @@
 import { randomUUID, randomBytes } from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
 import {
   diffHash,
   intralineDiff,
+  addSuggestions,
+  closeOpenSuggestions,
   openComments,
   ReviewStore,
+  suggestionCap,
   writeApproval,
   type Decision,
   type Diff,
@@ -11,8 +16,16 @@ import {
   type GitClient,
   type Review,
   type ReviewScope,
+  type Suggestion,
 } from "@reviewgate/core";
-import type { FileDetail, FileSummary, ReviewEvent, ReviewSummary } from "@reviewgate/core/api";
+import type {
+  FileDetail,
+  FileSummary,
+  PassStatus,
+  ReviewEvent,
+  ReviewSummary,
+} from "@reviewgate/core/api";
+import { AgentUnavailable, readProjectDocs, ReviewAgent } from "./agent.js";
 import { Highlighting, Palette } from "./highlight.js";
 
 export interface SessionInput {
@@ -40,6 +53,8 @@ export class Session {
   #detailCache = new Map<number, FileDetail>();
   #listeners = new Set<Listener>();
   #review: Review;
+  #agent: ReviewAgent | null = null;
+  #passStatus: PassStatus = { state: "idle" };
 
   private constructor(
     readonly git: GitClient,
@@ -73,7 +88,7 @@ export class Session {
       transcriptPath: input.transcriptPath ?? null,
     });
 
-    return new Session(
+    const session = new Session(
       input.git,
       input.scope,
       input.options,
@@ -84,6 +99,13 @@ export class Session {
       store,
       review,
     );
+    session.#agent = new ReviewAgent({
+      repoRoot: info.root,
+      patch,
+      transcriptPath: input.transcriptPath ?? null,
+      projectDocs: await readProjectDocs(info.root),
+    });
+    return session;
   }
 
   get review(): Review {
@@ -139,9 +161,10 @@ export class Session {
       summary: trimmed ? trimmed : null,
     };
 
+    // Openstaande voorstellen gaan dicht met reden round_closed: die had je nooit
+    // beoordeeld, dus ze onderdrukken later geen herhaling (§9).
     const next: Review = {
-      ...this.#review,
-      rounds,
+      ...closeOpenSuggestions({ ...this.#review, rounds }),
       status: decision === "approve" ? "approved" : "changes_requested",
     };
 
@@ -160,6 +183,112 @@ export class Session {
     }
 
     return this.commit(next);
+  }
+
+
+  // --- chat en de automatische pass (§9) -----------------------------------
+
+  get passStatus(): PassStatus {
+    return this.#passStatus;
+  }
+
+  #agentOrThrow(): ReviewAgent {
+    if (!this.#agent) throw new AgentUnavailable("de reviewer-assistent is niet beschikbaar");
+    return this.#agent;
+  }
+
+  /**
+   * Eén vraag in het chatpaneel. Het antwoord streamt met tokens tegelijk naar de
+   * UI; pas als het compleet is landt het in de review, zodat een afgebroken
+   * antwoord geen half bericht achterlaat.
+   */
+  async chat(message: string): Promise<Review> {
+    const trimmed = message.trim();
+    if (trimmed === "") throw new Error("een lege vraag levert niets op");
+
+    const agent = this.#agentOrThrow();
+    const withQuestion: Review = {
+      ...this.#review,
+      chat: [
+        ...this.#review.chat,
+        { id: randomUUID(), role: "user", body: trimmed, at: new Date().toISOString() },
+      ],
+    };
+    await this.commit(withQuestion);
+
+    // Bij de eerste vraag gaat de context mee; daarna hervat de SDK de sessie.
+    const prompt =
+      this.#review.chat.length <= 1
+        ? `${await agent.contextPrompt()}\n\n# Vraag\n\n${trimmed}`
+        : trimmed;
+
+    const answer = await agent.ask(prompt, (text) => this.#emit({ type: "chat-token", text }));
+
+    return this.commit({
+      ...this.#review,
+      chat: [
+        ...this.#review.chat,
+        { id: randomUUID(), role: "assistant", body: answer, at: new Date().toISOString() },
+      ],
+    });
+  }
+
+  /**
+   * De automatische eerste pass. Blokkeert niets: hij loopt naast het lezen, en de
+   * stand staat in de kopbalk. Levert suggesties, geen comments.
+   */
+  async runReviewPass(): Promise<void> {
+    if (this.#passStatus.state === "running") return;
+    if (!this.#agent) {
+      this.#setPassStatus({ state: "failed", error: "de reviewer-assistent is niet beschikbaar" });
+      return;
+    }
+
+    this.#setPassStatus({ state: "running" });
+    try {
+      const cap = suggestionCap(this.diff.changedLines);
+      const findings = await this.#agent.reviewPass(cap, this.#review);
+      const result = addSuggestions(this.#review, findings, { cap });
+
+      await this.#logDedupe(result.duplicates);
+      await this.commit(result.review);
+      this.#setPassStatus({ state: "done", count: result.added.length });
+    } catch (err) {
+      this.#setPassStatus({
+        state: "failed",
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  #setPassStatus(status: PassStatus): void {
+    this.#passStatus = status;
+    this.#emit({ type: "pass", status });
+  }
+
+  /**
+   * Elke automatische afwijzing met score naar `dedupe.log`, zodat de drempels na
+   * echt gebruik bij te stellen zijn (§15).
+   */
+  async #logDedupe(duplicates: ReadonlyArray<{ suggestion: Suggestion; score: number }>): Promise<void> {
+    if (duplicates.length === 0) return;
+    try {
+      const info = await this.git.info();
+      const dir = path.join(info.gitDir, "reviewgate");
+      await fs.mkdir(dir, { recursive: true });
+      const lines = duplicates.map((d) =>
+        JSON.stringify({
+          at: new Date().toISOString(),
+          path: d.suggestion.path ?? null,
+          score: Number(d.score.toFixed(3)),
+          body: d.suggestion.body,
+          duplicateOf: d.suggestion.duplicateOf ?? null,
+        }),
+      );
+      await fs.appendFile(path.join(dir, "dedupe.log"), `${lines.join("\n")}\n`, "utf8");
+    } catch {
+      // Logging mag de review nooit tegenhouden.
+    }
   }
 
   summary(): ReviewSummary {
@@ -187,6 +316,7 @@ export class Session {
       deletions: this.diff.deletions,
       changedLines: this.diff.changedLines,
       review: this.#review,
+      passStatus: this.#passStatus,
     };
   }
 
