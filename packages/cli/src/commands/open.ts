@@ -1,44 +1,103 @@
 import { NodeGitClient, type Diff, type DiffFile } from "@reviewgate/core";
-import { parseOpenArgs } from "../args.js";
+import {
+  createSession,
+  findRunningServer,
+  startServer,
+  VERSION,
+  type ServerRecord,
+} from "@reviewgate/server";
+import { parseOpenArgs, type OpenArgs } from "../args.js";
+import { openBrowser } from "../browser.js";
 
 export async function cmdOpen(argv: readonly string[], cwd: string): Promise<number> {
   const args = parseOpenArgs(argv, cwd);
   const git = await NodeGitClient.open(args.cwd);
 
+  if (args.json) return await printJson(git, args);
+
+  const info = await git.info();
+  const diffOptions = {
+    context: args.context,
+    includeUntracked: args.includeUntracked,
+    ...(args.range ? { range: args.range } : {}),
+  };
+
+  // Een draaiende server voor deze repo hergebruiken; anders zelf er een starten
+  // en blijven draaien zolang de review open staat (§3).
+  let record = await findRunningServer(info.gitDir);
+  let stop: (() => Promise<void>) | null = null;
+
+  if (!record) {
+    const server = await startServer({ cwd: args.cwd, ...(args.port ? { port: args.port } : {}) });
+    record = {
+      port: server.port,
+      pid: process.pid,
+      serverToken: server.serverToken,
+      startedAt: new Date().toISOString(),
+      version: VERSION,
+    } satisfies ServerRecord;
+    stop = server.close;
+  }
+
+  const session = await createSession(record, {
+    scope: args.scope,
+    options: diffOptions,
+    cwd: args.cwd,
+  });
+
+  process.stdout.write(`${session.url}\n`);
+
+  if (!args.noOpen) {
+    const opened = await openBrowser(session.url);
+    if (!opened) {
+      process.stdout.write("Kon de browser niet openen — gebruik de URL hierboven.\n");
+    }
+  }
+
+  if (!stop) {
+    // De server draaide al: die blijft van het andere proces, dus we zijn klaar.
+    return 0;
+  }
+
+  process.stdout.write("Server draait. Ctrl+C om te stoppen.\n");
+  await waitForSignal(stop);
+  return 0;
+}
+
+async function printJson(git: NodeGitClient, args: OpenArgs): Promise<number> {
   const diff = await git.diff(args.scope, {
     context: args.context,
     includeUntracked: args.includeUntracked,
     ...(args.range ? { range: args.range } : {}),
   });
-
-  if (args.json) {
-    const info = await git.info();
-    process.stdout.write(
-      `${JSON.stringify(
-        {
-          repo: { root: info.root, branch: info.branch, hasHead: info.hasHead },
-          diff,
-        },
-        null,
-        2,
-      )}\n`,
-    );
-    return 0;
-  }
-
-  process.stdout.write(renderSummary(diff));
-  // De browser-UI komt in M1; tot dan is `open` een leescommando.
-  process.stdout.write("\n(UI volgt in M1 — gebruik --json voor de volledige structuur)\n");
+  const info = await git.info();
+  process.stdout.write(
+    `${JSON.stringify(
+      { repo: { root: info.root, branch: info.branch, hasHead: info.hasHead }, diff },
+      null,
+      2,
+    )}\n`,
+  );
   return 0;
 }
 
-function renderSummary(diff: Diff): string {
+function waitForSignal(stop: () => Promise<void>): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      void stop().then(resolve, resolve);
+    };
+    process.once("SIGINT", done);
+    process.once("SIGTERM", done);
+  });
+}
+
+export function renderSummary(diff: Diff): string {
   const lines: string[] = [];
   lines.push(
     `${diff.files.length} bestand(en) · +${diff.additions} −${diff.deletions} · scope: ${diff.scope}`,
   );
   for (const f of diff.files) lines.push(`  ${statusChar(f)} ${label(f)}${counts(f)}`);
-  return lines.length > 1 ? `${lines.join("\n")}\n` : `${lines[0] as string}\n`;
+  return `${lines.join("\n")}\n`;
 }
 
 function statusChar(f: DiffFile): string {
@@ -51,8 +110,6 @@ function statusChar(f: DiffFile): string {
       return "R";
     case "copied":
       return "C";
-    case "mode_changed":
-      return "M";
     default:
       return "M";
   }

@@ -8,11 +8,13 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -b packages/core packages/cli",
-    "clean": "tsc -b --clean packages/core packages/cli",
+    "build": "pnpm run build:ts && pnpm run build:web",
+    "build:ts": "tsc -b packages/core packages/server packages/cli",
+    "build:web": "pnpm --filter @reviewgate/web build",
+    "clean": "tsc -b --clean packages/core packages/server packages/cli",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b --noEmit packages/core packages/cli"
+    "typecheck": "tsc -b --noEmit packages/core packages/server packages/cli && pnpm --filter @reviewgate/web typecheck"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

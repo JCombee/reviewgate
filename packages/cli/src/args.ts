@@ -7,6 +7,10 @@ export interface OpenArgs {
   context: number;
   includeUntracked: boolean;
   cwd: string;
+  /** Browser niet automatisch openen; de URL komt dan alleen in de terminal. */
+  noOpen: boolean;
+  /** Vaste poort in plaats van een ephemeral poort; handig tijdens ontwikkeling. */
+  port: number | null;
 }
 
 export class UsageError extends Error {}
@@ -23,6 +27,8 @@ export function parseOpenArgs(argv: readonly string[], cwd: string): OpenArgs {
     context: 5,
     includeUntracked: true,
     cwd,
+    noOpen: false,
+    port: null,
   };
   let scopeSet = false;
 
@@ -48,6 +54,17 @@ export function parseOpenArgs(argv: readonly string[], cwd: string): OpenArgs {
       case "--no-untracked":
         out.includeUntracked = false;
         break;
+      case "--no-open":
+        out.noOpen = true;
+        break;
+      case "--port": {
+        const v = argv[++i];
+        if (v === undefined) throw new UsageError("--port verwacht een poortnummer");
+        const n = Number.parseInt(v, 10);
+        if (Number.isNaN(n) || n < 0 || n > 65535) throw new UsageError(`ongeldige poort: ${v}`);
+        out.port = n;
+        break;
+      }
       case "-U":
       case "--context": {
         const v = argv[++i];

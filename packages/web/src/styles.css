@@ -1,0 +1,226 @@
+@import "tailwindcss";
+
+/*
+  Design tokens, in één keer vastgelegd (§8).
+
+  Richting: een leesomgeving voor code die opent vanuit een terminal. Rustig, dicht,
+  alle ruimte naar de diff, chrome zo dun mogelijk. Geen webfonts — de UI draait op
+  localhost en moet direct staan, dus systeemfamilies: één sans voor de chrome, één
+  monospace voor de code.
+
+  Kleur: de diffvlakken zijn laag verzadigd zodat lange sessies niet vermoeien; alleen
+  de per-teken highlight binnen een gewijzigde regel is hoog verzadigd. De enige echt
+  uitgesproken plek is de actiebalk onderaan (die komt in M3).
+*/
+
+:root {
+  color-scheme: light dark;
+
+  --rg-font-ui:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --rg-font-code:
+    ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", "Fira Code", Consolas,
+    "Liberation Mono", monospace;
+
+  --rg-size-ui: 13px;
+  --rg-size-code: 12.5px;
+  --rg-line-code: 1.55;
+
+  /* Vlakken en tekst — warm neutraal, niet het blauwgrijs van elke SaaS-app. */
+  --rg-bg: #fbfbf9;
+  --rg-bg-raised: #ffffff;
+  --rg-bg-sunken: #f2f2ee;
+  --rg-border: #e4e3dd;
+  --rg-border-strong: #ccccc3;
+  --rg-text: #1b1b19;
+  --rg-text-muted: #6a6a61;
+  --rg-text-faint: #97978c;
+  --rg-focus: #3b6ea5;
+
+  /* Diffvlakken: laag verzadigd. */
+  --rg-add-bg: #eaf4ec;
+  --rg-add-gutter: #dceee1;
+  --rg-del-bg: #fbecec;
+  --rg-del-gutter: #f5dcdc;
+
+  /* Per-teken highlight: hoog verzadigd, alleen hier. */
+  --rg-add-word: #a6dfb8;
+  --rg-del-word: #f2b3b3;
+
+  --rg-status-added: #2f7d4f;
+  --rg-status-deleted: #b03b3b;
+  --rg-status-renamed: #7a5cc0;
+  --rg-status-modified: #8a6a1f;
+
+  /* Voor M3: de actiebalk. Nu al vastgelegd zodat de wissel later niet ad hoc is. */
+  --rg-approve: #2f7d4f;
+  --rg-changes: #b4610f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --rg-bg: #17181b;
+    --rg-bg-raised: #1c1e22;
+    --rg-bg-sunken: #131417;
+    --rg-border: #2a2d33;
+    --rg-border-strong: #3d424a;
+    --rg-text: #e5e5e1;
+    --rg-text-muted: #9b9d9f;
+    --rg-text-faint: #71747a;
+    --rg-focus: #6fa8dc;
+
+    --rg-add-bg: #142219;
+    --rg-add-gutter: #1a2f21;
+    --rg-del-bg: #251618;
+    --rg-del-gutter: #33191c;
+
+    --rg-add-word: #2c6b43;
+    --rg-del-word: #7a2f37;
+
+    --rg-status-added: #5cbb82;
+    --rg-status-deleted: #e08585;
+    --rg-status-renamed: #a68ae0;
+    --rg-status-modified: #d0aa55;
+
+    --rg-approve: #4a9d6b;
+    --rg-changes: #d9832b;
+  }
+}
+
+:root[data-theme="dark"] {
+  --rg-bg: #17181b;
+  --rg-bg-raised: #1c1e22;
+  --rg-bg-sunken: #131417;
+  --rg-border: #2a2d33;
+  --rg-border-strong: #3d424a;
+  --rg-text: #e5e5e1;
+  --rg-text-muted: #9b9d9f;
+  --rg-text-faint: #71747a;
+  --rg-focus: #6fa8dc;
+  --rg-add-bg: #142219;
+  --rg-add-gutter: #1a2f21;
+  --rg-del-bg: #251618;
+  --rg-del-gutter: #33191c;
+  --rg-add-word: #2c6b43;
+  --rg-del-word: #7a2f37;
+  --rg-status-added: #5cbb82;
+  --rg-status-deleted: #e08585;
+  --rg-status-renamed: #a68ae0;
+  --rg-status-modified: #d0aa55;
+  --rg-approve: #4a9d6b;
+  --rg-changes: #d9832b;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--rg-bg);
+  color: var(--rg-text);
+  font-family: var(--rg-font-ui);
+  font-size: var(--rg-size-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--rg-focus);
+  outline-offset: 1px;
+}
+
+/* Motion alleen waar iets verandert, en nooit tegen de voorkeur van de gebruiker in. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- diff ---------------------------------------------------------------- */
+
+.rg-code {
+  font-family: var(--rg-font-code);
+  font-size: var(--rg-size-code);
+  line-height: var(--rg-line-code);
+  tab-size: 2;
+}
+
+.rg-row {
+  display: grid;
+  min-height: calc(var(--rg-size-code) * var(--rg-line-code));
+}
+
+.rg-row-unified {
+  grid-template-columns: 3.5rem 3.5rem 1fr;
+}
+
+.rg-row-split {
+  grid-template-columns: 3.5rem 1fr 3.5rem 1fr;
+}
+
+.rg-gutter {
+  padding: 0 0.5rem;
+  text-align: right;
+  color: var(--rg-text-faint);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+  border-right: 1px solid var(--rg-border);
+}
+
+.rg-content {
+  padding: 0 0.75rem;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.rg-line-add {
+  background: var(--rg-add-bg);
+}
+.rg-line-add > .rg-gutter {
+  background: var(--rg-add-gutter);
+}
+.rg-line-del {
+  background: var(--rg-del-bg);
+}
+.rg-line-del > .rg-gutter {
+  background: var(--rg-del-gutter);
+}
+.rg-line-empty {
+  background: var(--rg-bg-sunken);
+}
+
+.rg-word-add {
+  background: var(--rg-add-word);
+  border-radius: 2px;
+}
+.rg-word-del {
+  background: var(--rg-del-word);
+  border-radius: 2px;
+}
+
+.rg-hunk-header {
+  background: var(--rg-bg-sunken);
+  color: var(--rg-text-muted);
+  border-top: 1px solid var(--rg-border);
+  border-bottom: 1px solid var(--rg-border);
+}
+
+/* Shiki-tokens: één kleur per thema, gekozen via een variabele. */
+.rg-tok {
+  color: var(--rg-tok-l);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .rg-tok {
+    color: var(--rg-tok-d);
+  }
+}
+
+:root[data-theme="dark"] .rg-tok {
+  color: var(--rg-tok-d);
+}

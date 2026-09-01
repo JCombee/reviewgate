@@ -1,5 +1,5 @@
 {
-  "name": "@reviewgate/core",
+  "name": "@reviewgate/server",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,10 +7,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./api": {
-      "types": "./dist/api.d.ts",
-      "default": "./dist/api.js"
     }
   },
   "main": "./dist/index.js",
@@ -18,5 +14,11 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc -b"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@reviewgate/core": "workspace:*",
+    "hono": "^4.6.16",
+    "shiki": "^1.26.1"
   }
 }

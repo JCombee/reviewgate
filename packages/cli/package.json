@@ -19,6 +19,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@reviewgate/core": "workspace:*"
+    "@reviewgate/core": "workspace:*",
+    "@reviewgate/server": "workspace:*"
   }
 }

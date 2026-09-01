@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="7" fill="#1b1b19" />
+  <!-- De poort: twee stijlen met een balk ertussen. -->
+  <rect x="7" y="8" width="3" height="16" rx="1.2" fill="#f2f2ee" />
+  <rect x="22" y="8" width="3" height="16" rx="1.2" fill="#f2f2ee" />
+  <rect x="10" y="14" width="12" height="3" rx="1.2" fill="#4a9d6b" />
+</svg>
