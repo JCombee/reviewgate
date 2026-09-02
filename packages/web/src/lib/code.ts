@@ -1,6 +1,6 @@
 import type { HighlightLine, IntralineSegment, PaletteEntry } from "@reviewgate/core/api";
 
-/** Eén te renderen stukje regel: tekst, themakleuren, en of het gewijzigd is. */
+/** One renderable piece of a line: text, theme colours, and whether it changed. */
 export interface Piece {
   text: string;
   light: string;
@@ -9,11 +9,11 @@ export interface Piece {
 }
 
 /**
- * Legt de intraline-segmenten over de shiki-tokens heen.
+ * Lays the intraline segments over the shiki tokens.
  *
- * De twee weten niets van elkaar: shiki knipt op grammatica, de segmenten op
- * woordgrens. Hier worden ze op tekenpositie samengevoegd, zodat een gewijzigd
- * woord midden in een token alsnog precies gemarkeerd wordt.
+ * The two know nothing of each other: shiki cuts on grammar, the segments on word
+ * boundaries. Here they are merged on character position, so a changed word in the
+ * middle of a token still gets marked precisely.
  */
 export function toPieces(
   content: string,
@@ -45,7 +45,7 @@ export function toPieces(
     let start = 0;
     const len = piece.text.length;
     while (start < len) {
-      // Knip het token op de eerstvolgende segmentgrens die erbinnen valt.
+      // Cut the token at the next segment boundary that falls inside it.
       let end = len;
       for (const b of bounds) {
         const local = b - offset;
@@ -67,9 +67,8 @@ export function toPieces(
 }
 
 /**
- * Reconstrueert de bestandsregels uit de tokens, zodat context-expansie geen
- * tweede request nodig heeft: de tekst zit al in wat we voor de highlighting
- * hebben opgehaald.
+ * Reconstructs the file lines from the tokens, so context expansion needs no second
+ * request: the text is already in what we fetched for the highlighting.
  */
 export function linesFromTokens(lines: HighlightLine[] | null): string[] | null {
   if (!lines) return null;

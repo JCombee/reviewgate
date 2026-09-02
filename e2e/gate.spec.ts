@@ -6,17 +6,17 @@ import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * End-to-end over de hele keten (§14): een echte repo, de blokkerende hook, de
- * browser-UI, en het oordeel dat de hook op stdout teruggeeft.
+ * End to end over the whole chain (§14): a real repo, the blocking hook, the browser
+ * UI, and the verdict the hook hands back on stdout.
  *
- * Eén happy path (comment → knop wisselt → request changes → deny met de juiste
- * markdown) en één approve path.
+ * One happy path (comment → the button switches → request changes → deny with the
+ * right markdown) and one approve path.
  */
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CLI = path.join(ROOT, "packages", "cli", "bin", "reviewgate.mjs");
 
-const BASIS = [
+const BASE = [
   "export function handle(order) {",
   "  const key = `order:${order.id}`;",
   "  cache.forget(key);",
@@ -25,7 +25,7 @@ const BASIS = [
   "",
 ].join("\n");
 
-const GEWIJZIGD = [
+const CHANGED = [
   "export function handle(order) {",
   "  const key = `order:${order.id}`;",
   "  cache.forget(key);",
@@ -45,12 +45,14 @@ interface Gate {
 async function git(repo: string, ...args: string[]): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn("git", args, { cwd: repo, windowsHide: true });
-    child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`git ${args[0]} → ${code}`))));
+    child.on("close", (code) =>
+      code === 0 ? resolve() : reject(new Error(`git ${args[0]} → ${code}`)),
+    );
     child.on("error", reject);
   });
 }
 
-/** Zet een repo op met een gestagede wijziging en start de hook erop. */
+/** Sets up a repo with a staged change and starts the hook on it. */
 async function openGate(): Promise<Gate> {
   const repo = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "reviewgate-e2e-")));
 
@@ -59,11 +61,11 @@ async function openGate(): Promise<Gate> {
   await git(repo, "config", "user.email", "e2e@example.invalid");
   await git(repo, "config", "commit.gpgsign", "false");
 
-  await fs.writeFile(path.join(repo, "service.ts"), BASIS, "utf8");
+  await fs.writeFile(path.join(repo, "service.ts"), BASE, "utf8");
   await git(repo, "add", "-A");
-  await git(repo, "commit", "-m", "basis");
+  await git(repo, "commit", "-m", "base");
 
-  await fs.writeFile(path.join(repo, "service.ts"), GEWIJZIGD, "utf8");
+  await fs.writeFile(path.join(repo, "service.ts"), CHANGED, "utf8");
   await git(repo, "add", "-A");
 
   const child: ChildProcess = spawn(process.execPath, [CLI, "hook"], {
@@ -72,7 +74,7 @@ async function openGate(): Promise<Gate> {
     env: {
       ...process.env,
       REVIEWGATE_NO_OPEN: "1",
-      // De automatische pass heeft auth nodig en hoort niet bij dit pad.
+      // The automatic pass needs auth and is not part of this path.
       REVIEWGATE_AUTO_REVIEW: "0",
       REVIEWGATE_TIMEOUT_MS: "90000",
     },
@@ -83,7 +85,7 @@ async function openGate(): Promise<Gate> {
       session_id: "e2e",
       cwd: repo,
       tool_name: "Bash",
-      tool_input: { command: 'git commit -m "fix: cache invalideren"' },
+      tool_input: { command: 'git commit -m "fix: invalidate the cache"' },
     }),
   );
 
@@ -97,13 +99,13 @@ async function openGate(): Promise<Gate> {
         try {
           resolve(JSON.parse(stdout).hookSpecificOutput);
         } catch (err) {
-          reject(new Error(`onverwachte hook-uitvoer: ${stdout}\n${String(err)}`));
+          reject(new Error(`unexpected hook output: ${stdout}\n${String(err)}`));
         }
       });
     },
   );
 
-  // De hook start de server en schrijft dan pas de review; wachten op server.json.
+  // The hook starts the server and only then writes the review; wait for server.json.
   const record = await waitForServerRecord(repo);
   const session = await createSession(record, repo);
 
@@ -112,8 +114,8 @@ async function openGate(): Promise<Gate> {
     url: `http://127.0.0.1:${record.port}/r/${session.id}?token=${session.token}`,
     verdict,
     cleanup: async () => {
-      // Een test die geen beslissing neemt laat de hook in zijn timeout hangen; we
-      // maken hem af en negeren dan het oordeel dat er niet meer toe doet.
+      // A test that makes no decision leaves the hook waiting in its timeout; we finish
+      // it off and then ignore the verdict that no longer matters.
       verdict.catch(() => {});
       child.kill();
       await fs.rm(repo, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
@@ -134,16 +136,16 @@ async function waitForServerRecord(
       const res = await fetch(`http://127.0.0.1:${rec.port}/healthz`).catch(() => null);
       if (res?.ok) return rec;
     } catch {
-      // nog niet geschreven
+      // not written yet
     }
     await new Promise((r) => setTimeout(r, 100));
   }
-  throw new Error("de hook heeft geen server gestart");
+  throw new Error("the hook started no server");
 }
 
 /**
- * De hook maakt zijn eigen sessie aan; wij openen een tweede op dezelfde diff. Die
- * hangt aan dezelfde persistente review, dus de beslissing komt op de juiste plek.
+ * The hook creates its own session; we open a second one on the same diff. That hangs
+ * off the same persistent review, so the decision lands in the right place.
  */
 async function createSession(
   record: { port: number; serverToken: string },
@@ -159,7 +161,7 @@ async function createSession(
 
 const primary = (page: Page) => page.locator("button[data-decision]");
 
-test("happy path: comment plaatsen, knop wisselt, request changes komt terug in de hook", async ({
+test("happy path: place a comment, the button switches, request changes reaches the hook", async ({
   page,
 }) => {
   const gate = await openGate();
@@ -167,53 +169,55 @@ test("happy path: comment plaatsen, knop wisselt, request changes komt terug in 
     await page.goto(gate.url);
     await page.waitForSelector("[data-file-index]");
 
-    // Zonder comments is Approve de primaire actie.
+    // Without comments, Approve is the primary action.
     await expect(primary(page)).toHaveAttribute("data-decision", "approve");
     await expect(primary(page)).toHaveText("Approve");
 
-    // Comment op de toegevoegde regel.
+    // A comment on the added line.
     await page.locator('.rg-gutter-clickable[data-side="new"][data-line="4"]').click();
-    await page.locator("[data-comment-form] textarea").fill("dit invalidatie-pad mist de tag-variant");
-    await page.getByRole("button", { name: "Plaats" }).click();
+    await page
+      .locator("[data-comment-form] textarea")
+      .fill("this invalidation path misses the tag variant");
+    await page.getByRole("button", { name: "Comment", exact: true }).click();
     await page.waitForSelector("[data-comment-id]");
 
-    // De knop wisselt live van rol.
+    // The button switches role live.
     await expect(primary(page)).toHaveAttribute("data-decision", "request_changes");
     await expect(primary(page)).toHaveText("Request changes");
 
-    await page.locator("input[aria-label='Samenvatting']").fill("los eerst de cache-invalidatie op");
+    await page.locator("input[aria-label='Summary']").fill("sort out the cache invalidation first");
     await primary(page).click();
     await expect(page.locator("footer")).toContainText("Changes requested");
 
     const verdict = await gate.verdict;
     expect(verdict.permissionDecision).toBe("deny");
-    expect(verdict.permissionDecisionReason).toContain("# Code review: changes requested (ronde 1)");
+    expect(verdict.permissionDecisionReason).toContain("# Code review: changes requested (round 1)");
     expect(verdict.permissionDecisionReason).toContain(
-      "## Samenvatting\n\nlos eerst de cache-invalidatie op",
+      "## Summary\n\nsort out the cache invalidation first",
     );
     expect(verdict.permissionDecisionReason).toContain("## service.ts");
     expect(verdict.permissionDecisionReason).toContain(
-      "- L4: dit invalidatie-pad mist de tag-variant",
+      "- L4: this invalidation path misses the tag variant",
     );
   } finally {
     await gate.cleanup();
   }
 });
 
-test("approve path: zonder openstaande comments laat de hook de commit door", async ({ page }) => {
+test("approve path: without open comments the hook lets the commit through", async ({ page }) => {
   const gate = await openGate();
   try {
     await page.goto(gate.url);
     await page.waitForSelector("[data-file-index]");
 
-    await page.locator("input[aria-label='Samenvatting']").fill("opzet klopt");
+    await page.locator("input[aria-label='Summary']").fill("the shape holds");
     await primary(page).click();
-    await expect(page.locator("footer")).toContainText("Goedgekeurd");
+    await expect(page.locator("footer")).toContainText("Approved");
 
     const verdict = await gate.verdict;
     expect(verdict.permissionDecision).toBe("allow");
 
-    // Er ligt geen artifact meer: de hook heeft zijn goedkeuring opgebruikt.
+    // No artifact is left: the hook has spent its approval.
     const approved = path.join(gate.repo, ".git", "reviewgate", "approved");
     const rest = await fs.readdir(approved).catch(() => []);
     expect(rest).toEqual([]);
@@ -222,23 +226,23 @@ test("approve path: zonder openstaande comments laat de hook de commit door", as
   }
 });
 
-test("approve is onmogelijk zolang er een comment open staat", async ({ page }) => {
+test("approve is impossible while a comment is open", async ({ page }) => {
   const gate = await openGate();
   try {
     await page.goto(gate.url);
     await page.waitForSelector("[data-file-index]");
 
     await page.locator('.rg-gutter-clickable[data-side="new"][data-line="4"]').click();
-    await page.locator("[data-comment-form] textarea").fill("hier klopt iets niet");
-    await page.getByRole("button", { name: "Plaats" }).click();
+    await page.locator("[data-comment-form] textarea").fill("something is off here");
+    await page.getByRole("button", { name: "Comment", exact: true }).click();
     await page.waitForSelector("[data-comment-id]");
 
-    // Er is geen tweede knop en geen escape hatch: Request changes is het enige
-    // dat je kunt doen (§8).
+    // There is no second button and no escape hatch: Request changes is the only thing
+    // you can do (§8).
     await expect(page.locator("button[data-decision]")).toHaveCount(1);
     await expect(primary(page)).toHaveText("Request changes");
 
-    // De server weigert een approve ook rechtstreeks.
+    // The server refuses an approve directly as well.
     const url = new URL(gate.url);
     const id = url.pathname.split("/").pop() as string;
     const token = url.searchParams.get("token") as string;
@@ -251,7 +255,7 @@ test("approve is onmogelijk zolang er een comment open staat", async ({ page }) 
     const body = (await res.json()) as { openCommentIds: string[] };
     expect(body.openCommentIds).toHaveLength(1);
 
-    // Resolven zet de knop terug op Approve.
+    // Resolving puts the button back on Approve.
     await page.getByRole("button", { name: "Resolve" }).click();
     await expect(primary(page)).toHaveAttribute("data-decision", "approve");
   } finally {

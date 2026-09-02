@@ -22,8 +22,8 @@ export async function cmdOpen(argv: readonly string[], cwd: string): Promise<num
     ...(args.range ? { range: args.range } : {}),
   };
 
-  // Een draaiende server voor deze repo hergebruiken; anders zelf er een starten
-  // en blijven draaien zolang de review open staat (§3).
+  // Reuse a server that is already running for this repo; otherwise start one and
+  // keep it up for as long as the review is open (§3).
   let record = await findRunningServer(info.gitDir);
   let stop: (() => Promise<void>) | null = null;
 
@@ -50,16 +50,17 @@ export async function cmdOpen(argv: readonly string[], cwd: string): Promise<num
   if (!args.noOpen) {
     const opened = await openBrowser(session.url);
     if (!opened) {
-      process.stdout.write("Kon de browser niet openen — gebruik de URL hierboven.\n");
+      process.stdout.write("Could not open the browser — use the URL above.\n");
     }
   }
 
   if (!stop) {
-    // De server draaide al: die blijft van het andere proces, dus we zijn klaar.
+    // The server was already running, so it belongs to the other process and we are
+    // done here.
     return 0;
   }
 
-  process.stdout.write("Server draait. Ctrl+C om te stoppen.\n");
+  process.stdout.write("Server is running. Ctrl+C to stop.\n");
   await waitForSignal(stop);
   return 0;
 }
@@ -94,7 +95,7 @@ function waitForSignal(stop: () => Promise<void>): Promise<void> {
 export function renderSummary(diff: Diff): string {
   const lines: string[] = [];
   lines.push(
-    `${diff.files.length} bestand(en) · +${diff.additions} −${diff.deletions} · scope: ${diff.scope}`,
+    `${diff.files.length} file(s) · +${diff.additions} −${diff.deletions} · scope: ${diff.scope}`,
   );
   for (const f of diff.files) lines.push(`  ${statusChar(f)} ${label(f)}${counts(f)}`);
   return `${lines.join("\n")}\n`;
@@ -123,7 +124,7 @@ function label(f: DiffFile): string {
 }
 
 function counts(f: DiffFile): string {
-  if (f.binary) return "  (binair)";
+  if (f.binary) return "  (binary)";
   if (f.submodule) return "  (submodule)";
   return `  +${f.additions} −${f.deletions}`;
 }

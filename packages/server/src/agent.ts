@@ -3,33 +3,33 @@ import type { IncomingSuggestion, Review, Severity } from "@reviewgate/core";
 import type { Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
 /**
- * De read-only reviewer-assistent achter het chatpaneel en de automatische pass (§9).
+ * The read-only reviewer assistant behind the chat panel and the automatic pass (§9).
  *
- * Draait via de Claude Agent SDK met `cwd` op de repo en alleen `Read`, `Grep` en
- * `Glob`. Expliciet zonder Edit, Write en Bash: de hoofdsessie staat geblokkeerd te
- * wachten en er mag niets onder handen veranderen.
+ * Runs through the Claude Agent SDK with `cwd` on the repo and only `Read`, `Grep` and
+ * `Glob`. Explicitly without Edit, Write and Bash: the main session sits blocked and
+ * waiting, and nothing may change under its hands.
  */
 
 const ALLOWED_TOOLS = ["Read", "Grep", "Glob"];
 
-/** Meer transcript dan dit gaat niet mee; anders verdringt het de diff zelf. */
+/** More transcript than this does not come along; otherwise it crowds out the diff. */
 const MAX_TRANSCRIPT_CHARS = 40_000;
 const MAX_DIFF_CHARS = 120_000;
 
 export interface AgentContext {
   repoRoot: string;
-  /** De patch waar de review over gaat. */
+  /** The patch the review is about. */
   patch: string;
-  /** Transcript van de sessie die de code schreef (§9). */
+  /** Transcript of the session that wrote the code (§9). */
   transcriptPath: string | null;
-  /** Projectinstructies die de pass moet meewegen. */
+  /** Project instructions the pass should weigh. */
   projectDocs: string;
 }
 
 /**
- * De SDK is een zware module en de hook draait bij élke commit. Hem pas laden als
- * er daadwerkelijk een vraag of een pass komt scheelt dat bij het openen van de
- * gate; zonder chat betaal je er niets voor.
+ * The SDK is a heavy module and the hook runs on *every* commit. Loading it only when
+ * a question or a pass actually arrives saves that at gate-open time; without chat you
+ * pay nothing for it.
  */
 type QueryFn = typeof import("@anthropic-ai/claude-agent-sdk").query;
 let queryFn: QueryFn | null = null;
@@ -49,31 +49,31 @@ export class AgentUnavailable extends Error {
   }
 }
 
-const SYSTEM_PROMPT = `Je bent een reviewer-assistent in ReviewGate, een lokale code review gate.
+const SYSTEM_PROMPT = `You are a reviewer assistant inside ReviewGate, a local code review gate.
 
-Je legt uit en analyseert; je wijzigt niets. Je hebt alleen leesrechten op de repo
-(Read, Grep, Glob). Wees expliciet over wat je uit het transcript van de schrijvende
-sessie weet en wat je uit de code afleidt — die twee zijn niet hetzelfde.
+You explain and analyse; you change nothing. You have read-only access to the repo
+(Read, Grep, Glob). Be explicit about what you know from the transcript of the writing
+session and what you infer from the code — those two are not the same thing.
 
-Antwoord in het Nederlands, kort en concreet, met verwijzingen als bestand:regel.`;
+Answer briefly and concretely, with references in the form file:line.`;
 
-const PASS_PROMPT = `Doe een review-pass over de diff hieronder en lever je bevindingen als JSON.
+const PASS_PROMPT = `Do a review pass over the diff below and return your findings as JSON.
 
-Regels:
-- Noem alleen concrete defecten met een plek: bestand en regelnummer aan de nieuwe kant.
-- Geen stijlvoorkeuren, geen dingen die een linter of typechecker al vangt.
-- Noem alleen wat daadwerkelijk iets toevoegt. Als er niets is, lever een lege lijst.
-  Nul bevindingen is een geldige en vaak juiste uitkomst.
-- Hoogstens {CAP} bevindingen. Dat is een plafond, geen doel.
+Rules:
+- Name only concrete defects with a place: file and line number on the new side.
+- No style preferences, nothing a linter or type checker already catches.
+- Name only what genuinely adds something. If there is nothing, return an empty list.
+  Zero findings is a valid and often correct outcome.
+- At most {CAP} findings. That is a ceiling, not a target.
 
-Antwoord met uitsluitend JSON, zonder tekst eromheen, in deze vorm:
+Answer with JSON only, no text around it, in this shape:
 
 {"findings":[{"path":"src/a.ts","line":42,"endLine":48,"severity":"blocker","body":"..."}]}
 
-severity is "blocker", "aandachtspunt" of "nit".`;
+severity is "blocker", "consideration" or "nit".`;
 
 export class ReviewAgent {
-  /** Sessie van de SDK, zodat chat en pass dezelfde context delen (§9). */
+  /** The SDK session, so chat and pass share the same context (§9). */
   #sessionId: string | null = null;
 
   constructor(readonly context: AgentContext) {}
@@ -82,7 +82,7 @@ export class ReviewAgent {
     return {
       cwd: this.context.repoRoot,
       allowedTools: ALLOWED_TOOLS,
-      // Dubbel op slot: expliciet weigeren wat de review niet mag aanraken.
+      // Double-locked: explicitly refuse what the review must not touch.
       disallowedTools: ["Edit", "Write", "NotebookEdit", "Bash", "Task", "WebFetch", "WebSearch"],
       permissionMode: "default",
       systemPrompt: SYSTEM_PROMPT,
@@ -92,8 +92,8 @@ export class ReviewAgent {
   }
 
   /**
-   * Eén vraag aan de assistent. Tekst komt stukje bij beetje binnen via `onToken`,
-   * zodat de UI kan meelezen terwijl het antwoord groeit.
+   * One question to the assistant. Text arrives piece by piece through `onToken`, so
+   * the UI can read along while the answer grows.
    */
   async ask(prompt: string, onToken?: (text: string) => void): Promise<string> {
     let answer = "";
@@ -108,7 +108,7 @@ export class ReviewAgent {
         }
         if (message.type === "result") {
           if (message.subtype === "success") return message.result;
-          throw new AgentUnavailable(`de agent stopte met "${message.subtype}"`);
+          throw new AgentUnavailable(`the agent stopped with "${message.subtype}"`);
         }
       }
     } catch (err) {
@@ -118,25 +118,25 @@ export class ReviewAgent {
     return answer;
   }
 
-  /** De context die zowel de chat als de pass meekrijgt. */
+  /** The context both the chat and the pass receive. */
   async contextPrompt(): Promise<string> {
     const transcript = await this.#transcript();
     const parts = [
-      "# Diff onder review",
+      "# Diff under review",
       "",
       "```diff",
       truncate(this.context.patch, MAX_DIFF_CHARS),
       "```",
     ];
     if (this.context.projectDocs.trim() !== "") {
-      parts.push("", "# Projectinstructies", "", this.context.projectDocs.trim());
+      parts.push("", "# Project instructions", "", this.context.projectDocs.trim());
     }
     if (transcript) {
       parts.push(
         "",
-        "# Transcript van de sessie die deze code schreef",
+        "# Transcript of the session that wrote this code",
         "",
-        "Gebruik dit om intentie te achterhalen, niet als waarheid over de code.",
+        "Use this to work out intent, not as truth about the code.",
         "",
         truncate(transcript, MAX_TRANSCRIPT_CHARS),
       );
@@ -145,9 +145,9 @@ export class ReviewAgent {
   }
 
   /**
-   * De automatische eerste pass. Levert bevindingen die als *suggesties* in de
-   * review komen, niet als comments: de agent mag je aandacht ergens op vestigen,
-   * maar niet namens jou een oordeel neerzetten (§9).
+   * The automatic first pass. It yields findings that enter the review as
+   * *suggestions*, not as comments: the agent may draw your attention to something,
+   * but it may not put a judgement down on your behalf (§9).
    */
   async reviewPass(cap: number, review: Review): Promise<IncomingSuggestion[]> {
     const dismissed = review.suggestions.filter(
@@ -158,9 +158,9 @@ export class ReviewAgent {
     if (dismissed.length > 0) {
       parts.push(
         "",
-        "# Eerder afgewezen bevindingen — niet herhalen",
+        "# Findings dismissed earlier — do not repeat these",
         "",
-        ...dismissed.map((s) => `- ${s.path ?? "algemeen"}: ${s.body}`),
+        ...dismissed.map((s) => `- ${s.path ?? "general"}: ${s.body}`),
       );
     }
 
@@ -186,8 +186,8 @@ export class ReviewAgent {
 }
 
 /**
- * Het transcript is JSONL met veel ruis. We houden de tekst van de gebruiker en van
- * de assistent over: dat is waar de intentie in zit.
+ * The transcript is JSONL with a lot of noise. We keep the text of the user and of the
+ * assistant: that is where the intent sits.
  */
 export function summarizeTranscript(raw: string): string {
   const out: string[] = [];
@@ -212,7 +212,7 @@ function transcriptText(entry: unknown): string | null {
   if (role !== "user" && role !== "assistant") return null;
 
   const content = e.message?.content;
-  const label = role === "user" ? "Gebruiker" : "Claude";
+  const label = role === "user" ? "User" : "Claude";
 
   if (typeof content === "string") return `${label}: ${content}`;
   if (!Array.isArray(content)) return null;
@@ -227,7 +227,7 @@ function transcriptText(entry: unknown): string | null {
   return text.trim() === "" ? null : `${label}: ${text}`;
 }
 
-/** Haalt de findings uit het antwoord, ook als er tekst omheen staat. */
+/** Pulls the findings out of the answer, even with text around them. */
 export function parseFindings(answer: string): IncomingSuggestion[] {
   const json = extractJson(answer);
   if (!json) return [];
@@ -255,7 +255,7 @@ export function parseFindings(answer: string): IncomingSuggestion[] {
     if (typeof f.body !== "string" || f.body.trim() === "") continue;
 
     const severity: Severity =
-      f.severity === "blocker" || f.severity === "nit" ? f.severity : "aandachtspunt";
+      f.severity === "blocker" || f.severity === "nit" ? f.severity : "consideration";
     const hasLine = typeof f.line === "number" && Number.isInteger(f.line) && f.line > 0;
     const path = typeof f.path === "string" && f.path !== "" ? f.path : undefined;
 
@@ -292,10 +292,10 @@ function partialText(message: SDKMessage): string | null {
 
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
-  return `${text.slice(0, max)}\n… (afgekapt, ${text.length - max} tekens weggelaten)`;
+  return `${text.slice(0, max)}\n… (truncated, ${text.length - max} characters omitted)`;
 }
 
-/** `CLAUDE.md` en een eventuele `REVIEW.md` van het project (§9). */
+/** `CLAUDE.md` and, if present, the project's `REVIEW.md` (§9). */
 export async function readProjectDocs(repoRoot: string): Promise<string> {
   const parts: string[] = [];
   for (const name of ["CLAUDE.md", "REVIEW.md"]) {
@@ -303,7 +303,7 @@ export async function readProjectDocs(repoRoot: string): Promise<string> {
       const content = await fs.readFile(`${repoRoot}/${name}`, "utf8");
       parts.push(`## ${name}\n\n${content.trim()}`);
     } catch {
-      // Niet aanwezig is prima.
+      // Not present is fine.
     }
   }
   return parts.join("\n\n");

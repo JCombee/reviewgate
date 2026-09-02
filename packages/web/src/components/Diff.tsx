@@ -9,7 +9,7 @@ import { memo, useMemo, type CSSProperties, type ReactNode } from "react";
 import { toPieces } from "../lib/code.js";
 import type { ExpanderRow, HunkRow, LineRow, Row, SplitRow } from "../lib/rows.js";
 
-/** Een lopende regelselectie in de goot: het begin en het einde van een range. */
+/** A live line selection in the gutter: the start and end of a range. */
 export interface LineSelection {
   side: Side;
   start: number;
@@ -22,7 +22,7 @@ export interface GutterHandlers {
   onEnd: () => void;
 }
 
-/** Tekst van één regel: shiki-tokens met de intraline-markering eroverheen. */
+/** The text of one line: shiki tokens with the intraline marking laid over them. */
 export const CodeText = memo(function CodeText({
   content,
   tokens,
@@ -100,14 +100,14 @@ export function ExpanderRowView({
         </button>
       )}
       <button type="button" className={btn} onClick={() => onExpand(row.gapIndex, "all")}>
-        hele bestand
+        whole file
       </button>
-      <span className="text-[var(--rg-text-faint)]">{row.hidden} regels verborgen</span>
+      <span className="text-[var(--rg-text-faint)]">{row.hidden} lines hidden</span>
     </div>
   );
 }
 
-/** Tokens van de regel opzoeken aan de kant waar hij vandaan komt. */
+/** Look up the tokens of the line on the side it came from. */
 function tokensFor(detail: FileDetail, row: LineRow, side: Side): HighlightLine | null {
   const lineNo = side === "old" ? row.oldLine : row.newLine;
   if (lineNo === null) return null;
@@ -137,9 +137,9 @@ function inSelection(selection: LineSelection | null, side: Side, line: number |
 }
 
 /**
- * De goot is tegelijk regelnummer en aangrijppunt voor een comment: klikken geeft
- * één regel, slepen een range (§8). Daarom pointer-events in plaats van een klik:
- * anders kun je alleen losse regels becommentariëren.
+ * The gutter is both a line number and the handle for a comment: a click gives one
+ * line, a drag gives a range (§8). Hence pointer events rather than a click: otherwise
+ * you could only comment on single lines.
  */
 function Gutter({
   side,
@@ -168,7 +168,7 @@ function Gutter({
         ? {
             role: "button",
             tabIndex: -1,
-            title: "Comment op deze regel — sleep voor meerdere regels",
+            title: "Comment on this line — drag for several lines",
             onPointerDown: (e: React.PointerEvent<HTMLSpanElement>) => {
               e.preventDefault();
               gutter.onStart(side, line);
@@ -189,7 +189,7 @@ export interface RowsProps {
   onExpand: (gapIndex: number, action: "top" | "bottom" | "all") => void;
   selection: LineSelection | null;
   gutter: GutterHandlers | null;
-  /** Wat er onder een regel hoort te staan: discussies en het comment-formulier. */
+  /** What belongs under a line: discussions and the comment form. */
   below: (side: Side, line: number) => ReactNode;
 }
 

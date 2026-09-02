@@ -1,36 +1,37 @@
 import type { ReviewScope } from "../types.js";
 
 /**
- * Ontleden van het Bash-commando dat de hook onderschept.
+ * Parsing the Bash command the hook intercepts.
  *
- * De hook krijgt één string, geen argv. Die moet je zelf uit elkaar halen, want
- * `git add -A && git commit -m "..."` is de meest voorkomende vorm en betekent dat
- * er op hook-tijd nog niets gestaged is (§2).
+ * The hook gets a single string, not an argv. You have to take it apart yourself,
+ * because `git add -A && git commit -m "..."` is the most common shape and it means
+ * nothing is staged yet at hook time (§2).
  */
 
 export interface CommitAnalysis {
-  /** Bevat het commando een `git commit`? Zo niet, dan laat de hook het door. */
+  /** Does the command contain a `git commit`? If not, the hook lets it through. */
   isCommit: boolean;
-  /** De scope waarop gereviewd moet worden. */
+  /** The scope that should be reviewed. */
   scope: ReviewScope;
-  /** `--amend` staat in het commando. */
+  /** `--amend` is in the command. */
   amend: boolean;
-  /** `--no-verify` of `-n`: de gate omzeilen. Blokkeren met uitleg (§2). */
+  /** `--no-verify` or `-n`: bypassing the gate. Block it with an explanation (§2). */
   noVerify: boolean;
-  /** De message uit `-m`, of null als hij er niet in staat (bijv. bij `-F`). */
+  /** The message from `-m`, or null when it is not there (with `-F`, for instance). */
   message: string | null;
-  /** `-F <pad>` of `--file=<pad>`: de message komt uit een bestand. */
+  /** `-F <path>` or `--file=<path>`: the message comes from a file. */
   messageFile: string | null;
-  /** De ontlede segmenten, voor logging en foutmeldingen. */
+  /** The parsed segments, for logging and error messages. */
   segments: string[][];
 }
 
 /**
- * Splitst een shell-commando in segmenten en elk segment in argv.
+ * Splits a shell command into segments and each segment into argv.
  *
- * Bewust een kleine, eigen tokenizer: we hoeven geen shell te zijn, alleen goed
- * genoeg om `git commit` te herkennen inclusief quoting. Wat we niet begrijpen
- * behandelen we conservatief — liever een review te veel dan een gemiste commit.
+ * Deliberately a small, hand-written tokenizer: we do not need to be a shell, only
+ * good enough to recognise `git commit` including quoting. Anything we do not
+ * understand we treat conservatively — better one review too many than a missed
+ * commit.
  */
 export function splitCommand(command: string): string[][] {
   const segments: string[][] = [];
@@ -70,7 +71,7 @@ export function splitCommand(command: string): string[][] {
 
     if (ch === '"' || ch === "'") {
       quote = ch;
-      // Een lege string is ook een token: `git commit -m ""`.
+      // An empty string is a token too: `git commit -m ""`.
       hasToken = true;
       continue;
     }
@@ -80,7 +81,7 @@ export function splitCommand(command: string): string[][] {
       continue;
     }
     if (ch === "&" || ch === "|") {
-      // && , || en | scheiden allemaal commando's.
+      // &&, || and | all separate commands.
       if (command[i + 1] === ch) i++;
       endSegment();
       continue;
@@ -100,13 +101,13 @@ export function splitCommand(command: string): string[][] {
   return segments;
 }
 
-/** Is dit segment een `git`-aanroep van dit subcommando? */
+/** Is this segment a `git` invocation of this subcommand? */
 function isGitSubcommand(argv: readonly string[], sub: string): boolean {
   const first = argv[0];
   if (first !== "git" && first !== "git.exe" && !first?.endsWith("/git")) return false;
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i] as string;
-    // Globale opties vóór het subcommando overslaan: `git -c x=y commit`.
+    // Skip global options before the subcommand: `git -c x=y commit`.
     if (arg === "-c" || arg === "-C" || arg === "--git-dir" || arg === "--work-tree") {
       i++;
       continue;
@@ -156,7 +157,7 @@ export function analyzeCommand(command: string): CommitAnalysis {
     } else if (arg.startsWith("--file=")) {
       messageFile = arg.slice("--file=".length);
     } else if (/^-[a-zA-Z]{2,}$/.test(arg)) {
-      // Samengevoegde korte vlaggen: -am, -an, enzovoort.
+      // Bundled short flags: -am, -an and so on.
       const flags = arg.slice(1);
       if (flags.includes("a")) stagesAll = true;
       if (flags.includes("n")) noVerify = true;
@@ -169,7 +170,7 @@ export function analyzeCommand(command: string): CommitAnalysis {
     }
   }
 
-  // Een `git add` eerder in de keten stageert ook alles wat er nu ligt.
+  // A `git add` earlier in the chain also stages whatever is lying around now.
   const addsBefore = segments.some((s) => isGitSubcommand(s, "add"));
 
   const scope: ReviewScope = amend ? "amend" : stagesAll || addsBefore ? "working" : "staged";
@@ -179,7 +180,7 @@ export function analyzeCommand(command: string): CommitAnalysis {
     scope,
     amend,
     noVerify,
-    // git plakt meerdere -m aan elkaar met een lege regel ertussen.
+    // git joins several -m values with a blank line in between.
     message: messages.length > 0 ? messages.join("\n\n") : null,
     messageFile,
     segments,
@@ -187,11 +188,11 @@ export function analyzeCommand(command: string): CommitAnalysis {
 }
 
 /**
- * Herschrijft het commando zodat het de bewerkte message uit een bestand leest.
+ * Rewrites the command so it reads the edited message from a file.
  *
- * Dit is het enige moment waarop ReviewGate het commando van de agent aanpast
- * (§10). `-F <pad>` in plaats van `-m "..."` vermijdt alle quoting-ellende met
- * meerregelige messages en aanhalingstekens. Alle overige vlaggen blijven staan.
+ * This is the only moment ReviewGate touches the agent's command (§10). `-F <path>`
+ * instead of `-m "..."` avoids all the quoting misery with multi-line messages and
+ * quotation marks. Every other flag stays put.
  */
 export function rewriteWithMessageFile(command: string, messagePath: string): string {
   const segments = splitCommand(command);
@@ -213,7 +214,7 @@ export function rewriteWithMessageFile(command: string, messagePath: string): st
         continue;
       }
       if (/^-[a-zA-Z]{2,}$/.test(arg) && arg.endsWith("m")) {
-        // -am wordt -a; de message komt uit het bestand.
+        // -am becomes -a; the message comes from the file.
         const rest = arg.slice(1, -1);
         if (rest.length > 0) out.push(`-${rest}`);
         i++;
@@ -224,8 +225,8 @@ export function rewriteWithMessageFile(command: string, messagePath: string): st
     }
 
     if (!replaced) {
-      // Geen -m in het commando: git zou een editor openen. Ook dan geven we de
-      // message mee, want de reviewer heeft hem net vastgesteld.
+      // No -m in the command: git would open an editor. Even then we pass the
+      // message along, because the reviewer just settled on it.
     }
     out.push("-F", messagePath);
     return out;
@@ -234,7 +235,7 @@ export function rewriteWithMessageFile(command: string, messagePath: string): st
   return rewritten.map((argv) => argv.map(quoteArg).join(" ")).join(" && ");
 }
 
-/** Quoot een argument voor een POSIX-shell; git-bash draait ook op Windows. */
+/** Quotes an argument for a POSIX shell; git-bash runs on Windows too. */
 function quoteArg(arg: string): string {
   if (arg === "") return "''";
   if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(arg)) return arg;

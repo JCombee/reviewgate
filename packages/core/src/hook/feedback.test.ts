@@ -7,7 +7,7 @@ const comment = (over: Partial<Comment>): Comment => ({
   round: 1,
   scope: "line",
   kind: "issue",
-  body: "iets",
+  body: "something",
   author: "user",
   status: "open",
   replies: [],
@@ -26,7 +26,7 @@ const review = (over: Partial<Review> = {}): Review => ({
       n: 2,
       diffHash: "abc",
       scope: "staged",
-      commitMessage: "fix: iets",
+      commitMessage: "fix: something",
       editedCommitMessage: null,
       claudeSessionId: null,
       transcriptPath: null,
@@ -43,138 +43,147 @@ const review = (over: Partial<Review> = {}): Review => ({
 });
 
 describe("renderChangesRequested", () => {
-  it("groepeert per bestand, op regelnummer gesorteerd", () => {
+  it("groups per file, sorted by line number", () => {
     const out = renderChangesRequested(
       review({
         comments: [
-          comment({ path: "b.ts", side: "new", startLine: 17, body: "geen error-afhandeling" }),
-          comment({ path: "a.php", side: "new", startLine: 91, body: "tweede" }),
+          comment({ path: "b.ts", side: "new", startLine: 17, body: "no error handling" }),
+          comment({ path: "a.php", side: "new", startLine: 91, body: "second" }),
           comment({
             path: "a.php",
             side: "new",
             startLine: 42,
             endLine: 48,
-            body: "mist de tag-variant",
+            body: "misses the tag variant",
           }),
         ],
       }),
     );
 
-    expect(out).toContain("# Code review: changes requested (ronde 2)");
-    expect(out).toContain("## a.php\n\n- L42-48: mist de tag-variant\n- L91: tweede");
-    expect(out).toContain("## b.ts\n\n- L17: geen error-afhandeling");
+    expect(out).toContain("# Code review: changes requested (round 2)");
+    expect(out).toContain("## a.php\n\n- L42-48: misses the tag variant\n- L91: second");
+    expect(out).toContain("## b.ts\n\n- L17: no error handling");
     expect(out.indexOf("## a.php")).toBeLessThan(out.indexOf("## b.ts"));
   });
 
-  it("markeert vragen met een vraagteken", () => {
+  it("marks questions with a question mark", () => {
     const out = renderChangesRequested(
       review({
         comments: [
-          comment({ kind: "question", path: "a.php", side: "new", startLine: 91, body: "waarom?" }),
+          comment({ kind: "question", path: "a.php", side: "new", startLine: 91, body: "why?" }),
         ],
       }),
     );
-    expect(out).toContain("- ? L91: waarom?");
+    expect(out).toContain("- ? L91: why?");
   });
 
-  it("zet globale comments onder Algemeen", () => {
+  it("puts global comments under General", () => {
     const out = renderChangesRequested(
-      review({ comments: [comment({ scope: "global", body: "hoort in app/Services/" })] }),
+      review({ comments: [comment({ scope: "global", body: "belongs in app/Services/" })] }),
     );
-    expect(out).toContain("## Algemeen\n\n- hoort in app/Services/");
+    expect(out).toContain("## General\n\n- belongs in app/Services/");
   });
 
-  it("neemt de samenvatting bovenaan mee", () => {
+  it("carries the summary at the top", () => {
     const r = review();
     const withSummary = {
       ...r,
-      rounds: [{ ...r.rounds[0]!, summary: "los eerst de cache-invalidatie op" }],
-      comments: [comment({ scope: "global", body: "punt" })],
+      rounds: [{ ...r.rounds[0]!, summary: "sort out the cache invalidation first" }],
+      comments: [comment({ scope: "global", body: "point" })],
     };
     const out = renderChangesRequested(withSummary);
-    expect(out).toContain("## Samenvatting\n\nlos eerst de cache-invalidatie op");
-    expect(out.indexOf("## Samenvatting")).toBeLessThan(out.indexOf("## Algemeen"));
+    expect(out).toContain("## Summary\n\nsort out the cache invalidation first");
+    expect(out.indexOf("## Summary")).toBeLessThan(out.indexOf("## General"));
   });
 
-  it("laat de samenvatting weg als hij leeg is", () => {
-    expect(renderChangesRequested(review())).not.toContain("## Samenvatting");
+  it("leaves the summary out when it is empty", () => {
+    expect(renderChangesRequested(review())).not.toContain("## Summary");
   });
 
-  it("toont het message-blok alleen bij een bewerking of een comment erover", () => {
+  it("shows the message block only for an edit or a comment about it", () => {
     expect(renderChangesRequested(review())).not.toContain("## Commit message");
 
     const r = review();
-    const edited = { ...r, rounds: [{ ...r.rounds[0]!, editedCommitMessage: "fix(x): beter\n\nRefs #412" }] };
+    const edited = {
+      ...r,
+      rounds: [{ ...r.rounds[0]!, editedCommitMessage: "fix(x): better\n\nRefs #412" }],
+    };
     const out = renderChangesRequested(edited);
     expect(out).toContain("## Commit message");
-    expect(out).toContain("    fix(x): beter");
+    expect(out).toContain("    fix(x): better");
     expect(out).toContain("    Refs #412");
   });
 
-  it("zet bij een message-comment zowel de nieuwe message als de opmerking neer", () => {
+  it("shows both the new message and the remark for a message comment", () => {
     const r = review();
     const both: Review = {
       ...r,
-      rounds: [{ ...r.rounds[0]!, editedCommitMessage: "fix(x): beter" }],
-      comments: [comment({ scope: "commit_message", body: "splits dit in twee commits" })],
+      rounds: [{ ...r.rounds[0]!, editedCommitMessage: "fix(x): better" }],
+      comments: [comment({ scope: "commit_message", body: "split this into two commits" })],
     };
     const out = renderChangesRequested(both);
-    expect(out).toContain("    fix(x): beter");
-    expect(out).toContain("- splits dit in twee commits");
+    expect(out).toContain("    fix(x): better");
+    expect(out).toContain("- split this into two commits");
   });
 
-  it("negeert opgeloste en verouderde comments", () => {
+  it("ignores resolved and outdated comments", () => {
     const out = renderChangesRequested(
       review({
         comments: [
-          comment({ scope: "global", body: "opgelost", status: "resolved" }),
-          comment({ scope: "global", body: "verouderd", status: "outdated" }),
+          comment({ scope: "global", body: "resolved point", status: "resolved" }),
+          comment({ scope: "global", body: "outdated point", status: "outdated" }),
         ],
       }),
     );
-    expect(out).not.toContain("opgelost");
-    expect(out).not.toContain("verouderd");
+    expect(out).not.toContain("resolved point");
+    expect(out).not.toContain("outdated point");
   });
 
-  it("zet openstaande punten uit eerdere rondes apart", () => {
+  it("sets open points from earlier rounds apart", () => {
     const out = renderChangesRequested(
       review({
-        comments: [comment({ round: 1, path: "a.php", side: "new", startLine: 23, body: "nog niet opgelost" })],
+        comments: [
+          comment({ round: 1, path: "a.php", side: "new", startLine: 23, body: "not fixed yet" }),
+        ],
       }),
     );
-    expect(out).toContain("## Nog open uit eerdere rondes");
-    expect(out).toContain("- a.php L23: nog niet opgelost (ronde 1)");
+    expect(out).toContain("## Still open from earlier rounds");
+    expect(out).toContain("- a.php L23: not fixed yet (round 1)");
   });
 
-  it("neemt eigen reacties mee onder de comment", () => {
+  it("carries your own replies under the comment", () => {
     const out = renderChangesRequested(
       review({
         comments: [
           comment({
             scope: "global",
-            body: "punt",
+            body: "point",
             replies: [
-              { author: "user", body: "en dit ook", at: "2026-01-01T00:00:00.000Z" },
-              { author: "agent", body: "van de agent, niet meesturen", at: "2026-01-01T00:00:00.000Z" },
+              { author: "user", body: "and this too", at: "2026-01-01T00:00:00.000Z" },
+              {
+                author: "agent",
+                body: "from the agent, do not send",
+                at: "2026-01-01T00:00:00.000Z",
+              },
             ],
           }),
         ],
       }),
     );
-    expect(out).toContain("en dit ook");
-    expect(out).not.toContain("van de agent");
+    expect(out).toContain("and this too");
+    expect(out).not.toContain("from the agent");
   });
 });
 
 describe("renderApproved", () => {
-  it("geeft null zonder samenvatting", () => {
+  it("returns null without a summary", () => {
     expect(renderApproved(review())).toBeNull();
   });
 
-  it("geeft de samenvatting mee als context", () => {
+  it("passes the summary along as context", () => {
     const r = review();
-    const out = renderApproved({ ...r, rounds: [{ ...r.rounds[0]!, summary: "opzet klopt" }] });
-    expect(out).toContain("goedgekeurd (ronde 2)");
-    expect(out).toContain("opzet klopt");
+    const out = renderApproved({ ...r, rounds: [{ ...r.rounds[0]!, summary: "the shape holds" }] });
+    expect(out).toContain("approved (round 2)");
+    expect(out).toContain("the shape holds");
   });
 });

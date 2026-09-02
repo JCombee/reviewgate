@@ -7,20 +7,20 @@ export interface WaitResult {
 }
 
 export interface WaitOptions {
-  /** Hoe lang de hook maximaal blokkeert. Daarna is het een timeout (§2). */
+  /** How long the hook blocks at most. After that it is a timeout (§2). */
   timeoutMs: number;
-  /** Hoe vaak we het reviewbestand teruglezen. */
+  /** How often we re-read the review file. */
   intervalMs?: number;
   signal?: AbortSignal;
 }
 
 /**
- * Wacht tot er in de UI een beslissing valt.
+ * Waits until a decision is made in the UI.
  *
- * We pollen het reviewbestand op schijf in plaats van een promise in het geheugen
- * te delen: de server draait vaak in een ánder proces dan de hook, en een
- * serverherstart mag de hook niet eeuwig laten hangen (§7). Het bestand is de
- * bron van waarheid en overleeft allebei.
+ * We poll the review file on disk instead of sharing a promise in memory: the server
+ * often runs in a *different* process than the hook, and a server restart must not
+ * leave the hook hanging forever (§7). The file is the source of truth and survives
+ * both.
  */
 export async function waitForDecision(
   gitDir: string,

@@ -2,24 +2,24 @@ import { describe, expect, it } from "vitest";
 import { analyzeCommand, rewriteWithMessageFile, splitCommand } from "./command.js";
 
 describe("splitCommand", () => {
-  it("splitst op && en houdt quotes bij elkaar", () => {
-    expect(splitCommand(`git add -A && git commit -m "fix: iets met spaties"`)).toEqual([
+  it("splits on && and keeps quotes together", () => {
+    expect(splitCommand(`git add -A && git commit -m "fix: something with spaces"`)).toEqual([
       ["git", "add", "-A"],
-      ["git", "commit", "-m", "fix: iets met spaties"],
+      ["git", "commit", "-m", "fix: something with spaces"],
     ]);
   });
 
-  it("splitst ook op ;, | en ||", () => {
+  it("splits on ;, | and || as well", () => {
     expect(splitCommand("a; b | c || d")).toEqual([["a"], ["b"], ["c"], ["d"]]);
   });
 
-  it("laat een lege string als eigen argument staan", () => {
+  it("keeps an empty string as its own argument", () => {
     expect(splitCommand(`git commit -m ""`)).toEqual([["git", "commit", "-m", ""]]);
   });
 
-  it("respecteert enkele quotes en escapes", () => {
-    expect(splitCommand(`git commit -m 'het "citaat"' --amend`)).toEqual([
-      ["git", "commit", "-m", 'het "citaat"', "--amend"],
+  it("honours single quotes and escapes", () => {
+    expect(splitCommand(`git commit -m 'the "quote"' --amend`)).toEqual([
+      ["git", "commit", "-m", 'the "quote"', "--amend"],
     ]);
     expect(splitCommand(`git commit -m a\\ b`)).toEqual([["git", "commit", "-m", "a b"]]);
   });
@@ -27,122 +27,122 @@ describe("splitCommand", () => {
 
 describe("analyzeCommand", () => {
   const cases: Array<{
-    naam: string;
+    name: string;
     command: string;
-    verwacht: Partial<ReturnType<typeof analyzeCommand>>;
+    expected: Partial<ReturnType<typeof analyzeCommand>>;
   }> = [
     {
-      naam: "gewone commit met message",
+      name: "plain commit with a message",
       command: `git commit -m "fix: cache"`,
-      verwacht: { isCommit: true, scope: "staged", message: "fix: cache", noVerify: false },
+      expected: { isCommit: true, scope: "staged", message: "fix: cache", noVerify: false },
     },
     {
-      naam: "add en commit in één keten",
+      name: "add and commit in one chain",
       command: `git add -A && git commit -m "fix: cache"`,
-      // Er is op hook-tijd nog niets gestaged, dus de working tree is de scope (§2).
-      verwacht: { isCommit: true, scope: "working" },
+      // Nothing is staged at hook time, so the working tree is the scope (§2).
+      expected: { isCommit: true, scope: "working" },
     },
     {
-      naam: "commit -am",
+      name: "commit -am",
       command: `git commit -am "fix: cache"`,
-      verwacht: { isCommit: true, scope: "working", message: "fix: cache" },
+      expected: { isCommit: true, scope: "working", message: "fix: cache" },
     },
     {
-      naam: "commit -a los",
+      name: "commit -a separately",
       command: `git commit -a -m "x"`,
-      verwacht: { isCommit: true, scope: "working" },
+      expected: { isCommit: true, scope: "working" },
     },
     {
-      naam: "amend",
-      command: `git commit --amend -m "beter"`,
-      verwacht: { isCommit: true, scope: "amend", amend: true },
+      name: "amend",
+      command: `git commit --amend -m "better"`,
+      expected: { isCommit: true, scope: "amend", amend: true },
     },
     {
-      naam: "amend wint van -a",
+      name: "amend wins over -a",
       command: `git commit -a --amend --no-edit`,
-      verwacht: { scope: "amend", amend: true },
+      expected: { scope: "amend", amend: true },
     },
     {
-      naam: "no-verify",
+      name: "no-verify",
       command: `git commit --no-verify -m "x"`,
-      verwacht: { isCommit: true, noVerify: true },
+      expected: { isCommit: true, noVerify: true },
     },
     {
-      naam: "no-verify als samengevoegde korte vlag",
+      name: "no-verify as a bundled short flag",
       command: `git commit -nm "x"`,
-      verwacht: { noVerify: true, message: "x" },
+      expected: { noVerify: true, message: "x" },
     },
     {
-      naam: "meerdere -m worden samengevoegd",
-      command: `git commit -m "kop" -m "en de body"`,
-      verwacht: { message: "kop\n\nen de body" },
+      name: "several -m values are joined",
+      command: `git commit -m "subject" -m "and the body"`,
+      expected: { message: "subject\n\nand the body" },
     },
     {
-      naam: "--message= vorm",
-      command: `git commit --message=kort`,
-      verwacht: { message: "kort" },
+      name: "--message= form",
+      command: `git commit --message=short`,
+      expected: { message: "short" },
     },
     {
-      naam: "message uit een bestand",
+      name: "message from a file",
       command: `git commit -F /tmp/msg.txt`,
-      verwacht: { message: null, messageFile: "/tmp/msg.txt" },
+      expected: { message: null, messageFile: "/tmp/msg.txt" },
     },
     {
-      naam: "globale opties vóór het subcommando",
+      name: "global options before the subcommand",
       command: `git -c user.name=x commit -m "y"`,
-      verwacht: { isCommit: true, message: "y" },
+      expected: { isCommit: true, message: "y" },
     },
     {
-      naam: "geen commit",
+      name: "not a commit",
       command: `git status --short`,
-      verwacht: { isCommit: false },
+      expected: { isCommit: false },
     },
     {
-      naam: "commit in een woord dat er alleen op lijkt",
+      name: "a word that merely looks like one",
       command: `echo "git commit"`,
-      verwacht: { isCommit: false },
+      expected: { isCommit: false },
     },
     {
-      naam: "push is geen gate",
+      name: "push is not a gate",
       command: `git push origin main`,
-      verwacht: { isCommit: false },
+      expected: { isCommit: false },
     },
   ];
 
-  for (const { naam, command, verwacht } of cases) {
-    it(naam, () => {
-      expect(analyzeCommand(command)).toMatchObject(verwacht);
+  for (const { name, command, expected } of cases) {
+    it(name, () => {
+      expect(analyzeCommand(command)).toMatchObject(expected);
     });
   }
 });
 
 describe("rewriteWithMessageFile", () => {
-  it("vervangt -m door -F en laat de rest staan", () => {
-    expect(rewriteWithMessageFile(`git commit -m "oud" --no-edit`, "/tmp/msg")).toBe(
+  it("replaces -m with -F and leaves the rest alone", () => {
+    expect(rewriteWithMessageFile(`git commit -m "old" --no-edit`, "/tmp/msg")).toBe(
       "git commit --no-edit -F /tmp/msg",
     );
   });
 
-  it("houdt de keten intact", () => {
-    expect(rewriteWithMessageFile(`git add -A && git commit -m "oud"`, "/tmp/msg")).toBe(
+  it("keeps the chain intact", () => {
+    expect(rewriteWithMessageFile(`git add -A && git commit -m "old"`, "/tmp/msg")).toBe(
       "git add -A && git commit -F /tmp/msg",
     );
   });
 
-  it("laat -a staan als -am gesplitst wordt", () => {
-    expect(rewriteWithMessageFile(`git commit -am "oud"`, "/tmp/msg")).toBe(
+  it("keeps -a when -am is split up", () => {
+    expect(rewriteWithMessageFile(`git commit -am "old"`, "/tmp/msg")).toBe(
       "git commit -a -F /tmp/msg",
     );
   });
 
-  it("vervangt ook een bestaande -F", () => {
-    expect(rewriteWithMessageFile(`git commit -F /tmp/oud`, "/tmp/nieuw")).toBe(
-      "git commit -F /tmp/nieuw",
+  it("replaces an existing -F too", () => {
+    expect(rewriteWithMessageFile(`git commit -F /tmp/old`, "/tmp/new")).toBe(
+      "git commit -F /tmp/new",
     );
   });
 
-  it("quoot een pad met spaties", () => {
-    const out = rewriteWithMessageFile(`git commit -m "x"`, "/pad met spatie/msg");
-    expect(out).toBe("git commit -F '/pad met spatie/msg'");
+  it("quotes a path with spaces", () => {
+    const out = rewriteWithMessageFile(`git commit -m "x"`, "/path with space/msg");
+    expect(out).toBe("git commit -F '/path with space/msg'");
   });
 });

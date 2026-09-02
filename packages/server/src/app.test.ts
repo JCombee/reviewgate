@@ -5,18 +5,17 @@ import { createApp, SessionStore } from "./app.js";
 import { Session } from "./session.js";
 
 /**
- * Integratietests tegen een echte tijdelijke git-repo (§14). We praten met de app
- * via `app.fetch` in plaats van over een socket: dat is dezelfde code als in
- * productie, zonder poorten en wachttijden.
+ * Integration tests against a real temporary git repo (§14). We talk to the app
+ * through `app.fetch` rather than over a socket: that is the same code as in
+ * production, without ports and waiting.
  */
 
-const SERVER_TOKEN = "server-token-voor-tests";
+const SERVER_TOKEN = "server-token-for-tests";
 
 let repo: TestRepo;
 let store: SessionStore;
 let app: ReturnType<typeof createApp>;
 let session: Session;
-
 
 async function json<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
@@ -42,7 +41,7 @@ beforeEach(async () => {
   repo = await TestRepo.create();
   await repo.write("src/service.ts", "export const a = 1;\nexport const b = 2;\n");
   await repo.addAll();
-  await repo.commit("basis");
+  await repo.commit("base");
   await repo.write("src/service.ts", "export const a = 1;\nexport const b = 22;\n");
   await repo.addAll();
 
@@ -59,43 +58,47 @@ afterEach(async () => {
   await repo.cleanup();
 });
 
-describe("toegang", () => {
-  it("weigert een request zonder token", async () => {
+describe("access", () => {
+  it("refuses a request without a token", async () => {
     const res = await app.fetch(new Request(`http://127.0.0.1/api/review/${session.id}`));
     expect(res.status).toBe(403);
   });
 
-  it("weigert een verkeerd token", async () => {
-    const res = await req(`/api/review/${session.id}`, {}, "fout-token");
+  it("refuses a wrong token", async () => {
+    const res = await req(`/api/review/${session.id}`, {}, "wrong-token");
     expect(res.status).toBe(403);
   });
 
-  it("accepteert het token uit de query, zoals in de review-URL", async () => {
+  it("accepts the token from the query, the way the review URL carries it", async () => {
     const res = await app.fetch(
       new Request(`http://127.0.0.1/api/review/${session.id}?token=${session.token}`),
     );
     expect(res.status).toBe(200);
   });
 
-  it("geeft 404 voor een onbekende sessie", async () => {
-    const res = await req("/api/review/bestaat-niet");
+  it("returns 404 for an unknown session", async () => {
+    const res = await req("/api/review/does-not-exist");
     expect(res.status).toBe(404);
   });
 
-  it("laat alleen het beheerstoken sessies aanmaken", async () => {
+  it("lets only the admin token create sessions", async () => {
     const bad = await post("/api/sessions", { scope: "staged" });
     expect(bad.status).toBe(403);
 
-    const good = await req("/api/sessions", {
-      method: "POST",
-      body: JSON.stringify({ scope: "staged", cwd: repo.root }),
-    }, SERVER_TOKEN);
+    const good = await req(
+      "/api/sessions",
+      {
+        method: "POST",
+        body: JSON.stringify({ scope: "staged", cwd: repo.root }),
+      },
+      SERVER_TOKEN,
+    );
     expect(good.status).toBe(200);
   });
 });
 
-describe("samenvatting", () => {
-  it("bevat de diff en de persistente review", async () => {
+describe("summary", () => {
+  it("carries the diff and the persistent review", async () => {
     const summary = await json<ReviewSummary>(await req(`/api/review/${session.id}`));
     expect(summary.files.map((f) => f.path)).toEqual(["src/service.ts"]);
     expect(summary.additions).toBe(1);
@@ -108,14 +111,14 @@ describe("samenvatting", () => {
 describe("comments", () => {
   const lineComment = {
     scope: "line",
-    body: "hier ontbreekt de tag-variant",
+    body: "the tag variant is missing here",
     path: "src/service.ts",
     side: "new",
     startLine: 2,
     anchorSnippet: "export const b = 22;",
   };
 
-  it("plaatst een regel-comment en geeft de review terug", async () => {
+  it("places a line comment and returns the review", async () => {
     const res = await post(`/api/review/${session.id}/comments`, lineComment);
     expect(res.status).toBe(200);
     const { review } = await json<{ review: Review }>(res);
@@ -132,18 +135,18 @@ describe("comments", () => {
     });
   });
 
-  it("weigert een comment zonder tekst", async () => {
+  it("refuses a comment without text", async () => {
     const res = await post(`/api/review/${session.id}/comments`, { ...lineComment, body: " " });
     expect(res.status).toBe(400);
   });
 
-  it("weigert een regel-comment zonder regelnummer", async () => {
-    const { startLine: _drop, ...zonder } = lineComment;
-    const res = await post(`/api/review/${session.id}/comments`, zonder);
+  it("refuses a line comment without a line number", async () => {
+    const { startLine: _drop, ...without } = lineComment;
+    const res = await post(`/api/review/${session.id}/comments`, without);
     expect(res.status).toBe(400);
   });
 
-  it("bewerkt, beantwoordt, resolvet en verwijdert", async () => {
+  it("edits, replies, resolves and deletes", async () => {
     const created = await json<{ review: Review }>(
       await post(`/api/review/${session.id}/comments`, lineComment),
     );
@@ -152,13 +155,13 @@ describe("comments", () => {
     const edited = await json<{ review: Review }>(
       await req(`/api/review/${session.id}/comments/${id}`, {
         method: "PATCH",
-        body: JSON.stringify({ body: "aangepast" }),
+        body: JSON.stringify({ body: "edited" }),
       }),
     );
-    expect(edited.review.comments[0]?.body).toBe("aangepast");
+    expect(edited.review.comments[0]?.body).toBe("edited");
 
     const replied = await json<{ review: Review }>(
-      await post(`/api/review/${session.id}/comments/${id}/replies`, { body: "klopt" }),
+      await post(`/api/review/${session.id}/comments/${id}/replies`, { body: "agreed" }),
     );
     expect(replied.review.comments[0]?.replies).toHaveLength(1);
 
@@ -178,42 +181,42 @@ describe("comments", () => {
     expect(deleted.review.comments).toHaveLength(0);
   });
 
-  it("geeft 404 voor een onbekende comment", async () => {
-    const res = await req(`/api/review/${session.id}/comments/onbekend`, { method: "DELETE" });
+  it("returns 404 for an unknown comment", async () => {
+    const res = await req(`/api/review/${session.id}/comments/unknown`, { method: "DELETE" });
     expect(res.status).toBe(404);
   });
 
-  it("bewaart comments op schijf, zodat ze een herstart overleven", async () => {
+  it("keeps comments on disk, so they survive a restart", async () => {
     await post(`/api/review/${session.id}/comments`, lineComment);
 
-    // Een nieuwe sessie op dezelfde diff staat gelijk aan een herstart van de server.
-    const tweede = await Session.create(
+    // A new session on the same diff is the same thing as a restart of the server.
+    const second = await Session.create(
       { git: await NodeGitClient.open(repo.root), scope: "staged", options: {} },
       new SessionStore().highlighting,
     );
-    expect(tweede.review.id).toBe(session.review.id);
-    expect(tweede.review.comments).toHaveLength(1);
-    expect(tweede.review.comments[0]).toMatchObject({
+    expect(second.review.id).toBe(session.review.id);
+    expect(second.review.comments).toHaveLength(1);
+    expect(second.review.comments[0]).toMatchObject({
       path: "src/service.ts",
       startLine: 2,
-      body: "hier ontbreekt de tag-variant",
+      body: "the tag variant is missing here",
     });
   });
 });
 
 describe("commit message", () => {
-  it("slaat een aangepaste message op", async () => {
+  it("stores an adjusted message", async () => {
     const res = await req(`/api/review/${session.id}/commit-message`, {
       method: "PUT",
-      body: JSON.stringify({ message: "fix(service): tags invalideren" }),
+      body: JSON.stringify({ message: "fix(service): invalidate tags" }),
     });
     const { review } = await json<{ review: Review }>(res);
-    expect(review.rounds[0]?.editedCommitMessage).toBe("fix(service): tags invalideren");
+    expect(review.rounds[0]?.editedCommitMessage).toBe("fix(service): invalidate tags");
   });
 });
 
 describe("events", () => {
-  it("stuurt de huidige review meteen bij het openen van de stream", async () => {
+  it("sends the current review as soon as the stream opens", async () => {
     const res = await req(`/api/review/${session.id}/events`);
     expect(res.headers.get("content-type")).toContain("text/event-stream");
 
@@ -225,33 +228,33 @@ describe("events", () => {
     await reader.cancel();
   });
 
-  it("stuurt een nieuwe stand na een mutatie", async () => {
+  it("sends a new state after a mutation", async () => {
     const res = await req(`/api/review/${session.id}/events`);
     const reader = (res.body as ReadableStream<Uint8Array>).getReader();
-    await reader.read(); // de eerste stand
+    await reader.read(); // the first state
 
     await post(`/api/review/${session.id}/comments`, {
       scope: "global",
-      body: "hoort in Services",
+      body: "belongs in Services",
     });
 
     const chunk = await reader.read();
     const text = new TextDecoder().decode(chunk.value);
-    expect(text).toContain("hoort in Services");
+    expect(text).toContain("belongs in Services");
     await reader.cancel();
   });
 });
 
-describe("beslissing", () => {
+describe("decision", () => {
   const lineComment = {
     scope: "line",
-    body: "hier ontbreekt iets",
+    body: "something is missing here",
     path: "src/service.ts",
     side: "new",
     startLine: 2,
   };
 
-  it("weigert approve zolang er een comment open staat", async () => {
+  it("refuses approve while a comment is still open", async () => {
     await post(`/api/review/${session.id}/comments`, lineComment);
 
     const res = await post(`/api/review/${session.id}/decision`, { decision: "approve" });
@@ -260,7 +263,7 @@ describe("beslissing", () => {
     expect(body.openCommentIds).toHaveLength(1);
   });
 
-  it("staat approve toe zodra de comment opgelost is", async () => {
+  it("allows approve once the comment is resolved", async () => {
     const created = await json<{ review: Review }>(
       await post(`/api/review/${session.id}/comments`, lineComment),
     );
@@ -269,15 +272,15 @@ describe("beslissing", () => {
 
     const res = await post(`/api/review/${session.id}/decision`, {
       decision: "approve",
-      summary: "opzet klopt",
+      summary: "the shape holds",
     });
     expect(res.status).toBe(200);
     const { review } = await json<{ review: Review }>(res);
     expect(review.status).toBe("approved");
-    expect(review.rounds[0]).toMatchObject({ decision: "approve", summary: "opzet klopt" });
+    expect(review.rounds[0]).toMatchObject({ decision: "approve", summary: "the shape holds" });
   });
 
-  it("schrijft bij approve een artifact voor precies deze diff", async () => {
+  it("writes an artifact for exactly this diff on approve", async () => {
     await post(`/api/review/${session.id}/decision`, { decision: "approve" });
 
     const patch = await session.git.rawDiff("staged", {});
@@ -285,27 +288,27 @@ describe("beslissing", () => {
     expect(approval).not.toBeNull();
     expect(approval?.reviewId).toBe(session.review.id);
 
-    // Een andere diff heeft geen goedkeuring.
-    expect(await readApproval(`${repo.root}/.git`, diffHash("iets anders"))).toBeNull();
+    // Another diff has no approval.
+    expect(await readApproval(`${repo.root}/.git`, diffHash("something else"))).toBeNull();
   });
 
-  it("laat request_changes wél toe met openstaande comments", async () => {
+  it("does allow request_changes with open comments", async () => {
     await post(`/api/review/${session.id}/comments`, lineComment);
     const res = await post(`/api/review/${session.id}/decision`, {
       decision: "request_changes",
-      summary: "eerst de invalidatie",
+      summary: "the invalidation first",
     });
     expect(res.status).toBe(200);
     const { review } = await json<{ review: Review }>(res);
     expect(review.status).toBe("changes_requested");
   });
 
-  it("weigert een onbekende beslissing", async () => {
-    const res = await post(`/api/review/${session.id}/decision`, { decision: "misschien" });
+  it("refuses an unknown decision", async () => {
+    const res = await post(`/api/review/${session.id}/decision`, { decision: "maybe" });
     expect(res.status).toBe(400);
   });
 
-  it("bewaart een lege samenvatting als null", async () => {
+  it("stores an empty summary as null", async () => {
     const res = await post(`/api/review/${session.id}/decision`, {
       decision: "approve",
       summary: "   ",

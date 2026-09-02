@@ -23,7 +23,7 @@ import { Highlighting } from "./highlight.js";
 import { DecisionConflict, Session } from "./session.js";
 
 export interface AppDeps {
-  /** Beheerstoken uit server.json; alleen de CLI mag hiermee sessies aanmaken. */
+  /** Admin token from server.json; only the CLI may create sessions with it. */
   serverToken: string;
   repoRoot: string;
   version: string;
@@ -55,7 +55,7 @@ export class SessionStore {
   }
 }
 
-/** Vergelijking in constante tijd, zodat het token niet te raden is per response-tijd. */
+/** Constant-time comparison, so the token cannot be guessed from response timing. */
 function tokenMatches(expected: string, given: string | undefined): boolean {
   if (!given) return false;
   const a = Buffer.from(expected, "utf8");
@@ -77,7 +77,7 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     c.json({ ok: true, version: deps.version, repoRoot: deps.repoRoot, sessions: store.size }),
   );
 
-  // --- beheer: sessie aanmaken -------------------------------------------
+  // --- admin: creating a session ------------------------------------------
   app.post("/api/sessions", async (c) => {
     if (!tokenMatches(deps.serverToken, bearer(c.req.header("authorization")))) {
       return c.json({ error: "forbidden" }, 403);
@@ -87,7 +87,7 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     try {
       body = (await c.req.json()) as CreateSessionBody;
     } catch {
-      return c.json({ error: "ongeldige JSON" }, 400);
+      return c.json({ error: "invalid JSON" }, 400);
     }
 
     const git = await NodeGitClient.open(body.cwd ?? deps.repoRoot);
@@ -104,7 +104,7 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     );
     store.add(session);
 
-    // De automatische pass loopt naast het lezen en blokkeert niets (§9).
+    // The automatic pass runs alongside your reading and blocks nothing (§9).
     if (session.config.autoReview && process.env["REVIEWGATE_AUTO_REVIEW"] !== "0") {
       void session.runReviewPass();
     }
@@ -117,12 +117,12 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     });
   });
 
-  // --- review-API ---------------------------------------------------------
-  /** Sessie ophalen en het token controleren; anders meteen het juiste antwoord. */
+  // --- review API ----------------------------------------------------------
+  /** Fetch the session and check the token; otherwise answer straight away. */
   function resolve(c: Context): Session | Response {
     const id = c.req.param("id");
     const session = id ? store.get(id) : undefined;
-    if (!session) return c.json({ error: "onbekende review" }, 404);
+    if (!session) return c.json({ error: "unknown review" }, 404);
     const given = bearer(c.req.header("authorization")) ?? c.req.query("token");
     if (!tokenMatches(session.token, given)) return c.json({ error: "forbidden" }, 403);
     return session;
@@ -130,7 +130,7 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
 
   const isSession = (v: Session | Response): v is Session => v instanceof Session;
 
-  /** Mutatie uitvoeren, opslaan, uitzenden en de nieuwe review teruggeven. */
+  /** Run the mutation, save it, broadcast it and return the new review. */
   async function mutate(
     c: Context,
     session: Session,
@@ -157,15 +157,15 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     if (!isSession(s)) return s;
 
     const index = Number.parseInt(c.req.param("index") ?? "", 10);
-    if (Number.isNaN(index)) return c.json({ error: "ongeldige index" }, 400);
+    if (Number.isNaN(index)) return c.json({ error: "invalid index" }, 400);
 
     const detail = await s.fileDetail(index);
-    if (!detail) return c.json({ error: "onbekend bestand" }, 404);
+    if (!detail) return c.json({ error: "unknown file" }, 404);
     return c.json(detail);
   });
 
-  // Volledige bestandsinhoud, voor context-expansie wanneer highlighting is
-  // overgeslagen en de tokens dus geen tekst bevatten (§7, §12).
+  // Full file content, for context expansion when highlighting was skipped and the
+  // tokens therefore carry no text (§7, §12).
   app.get("/api/review/:id/file", async (c) => {
     const s = resolve(c);
     if (!isSession(s)) return s;
@@ -173,10 +173,10 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     const path = c.req.query("path");
     const side = c.req.query("side");
     if (!path || (side !== "old" && side !== "new")) {
-      return c.json({ error: "path en side zijn verplicht" }, 400);
+      return c.json({ error: "path and side are required" }, 400);
     }
     const content = await s.git.fileContent(path, side, s.scope);
-    if (content === null) return c.json({ error: "bestand niet gevonden" }, 404);
+    if (content === null) return c.json({ error: "file not found" }, 404);
     return c.json({ path, side, content });
   });
 
@@ -184,7 +184,7 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     const s = resolve(c);
     if (!isSession(s)) return s;
     const body = (await c.req.json().catch(() => null)) as CreateCommentBody | null;
-    if (!body) return c.json({ error: "ongeldige JSON" }, 400);
+    if (!body) return c.json({ error: "invalid JSON" }, 400);
     return mutate(c, s, () => addComment(s.review, body));
   });
 
@@ -194,7 +194,7 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     const cid = c.req.param("cid") ?? "";
     const body = (await c.req.json().catch(() => null)) as { body?: string } | null;
     const text = body?.body;
-    if (typeof text !== "string") return c.json({ error: "body ontbreekt" }, 400);
+    if (typeof text !== "string") return c.json({ error: "body is missing" }, 400);
     return mutate(c, s, () => editComment(s.review, cid, text));
   });
 
@@ -211,7 +211,7 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     const cid = c.req.param("cid") ?? "";
     const body = (await c.req.json().catch(() => null)) as { body?: string } | null;
     const text = body?.body;
-    if (typeof text !== "string") return c.json({ error: "body ontbreekt" }, 400);
+    if (typeof text !== "string") return c.json({ error: "body is missing" }, 400);
     return mutate(c, s, () => addReply(s.review, cid, text));
   });
 
@@ -233,14 +233,14 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
   });
 
 
-  // --- chat en suggesties (§9) --------------------------------------------
+  // --- chat and suggestions (§9) -------------------------------------------
   app.post("/api/review/:id/chat", async (c) => {
     const s = resolve(c);
     if (!isSession(s)) return s;
     const body = (await c.req.json().catch(() => null)) as { message?: string } | null;
     const message = body?.message;
     if (typeof message !== "string" || message.trim() === "") {
-      return c.json({ error: "message ontbreekt" }, 400);
+      return c.json({ error: "message is missing" }, 400);
     }
     try {
       const review = await s.chat(message);
@@ -250,8 +250,8 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     }
   });
 
-  // De pass loopt op de achtergrond: het antwoord komt meteen, de bevindingen
-  // druppelen via SSE binnen (§9).
+  // The pass runs in the background: the response comes back at once, the findings
+  // trickle in over SSE (§9).
   app.post("/api/review/:id/pass", (c) => {
     const s = resolve(c);
     if (!isSession(s)) return s;
@@ -266,11 +266,11 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     const body = (await c.req.json().catch(() => null)) as { body?: string } | null;
 
     const suggestion = s.review.suggestions.find((x) => x.id === sid);
-    if (!suggestion) return c.json({ error: "onbekend voorstel" }, 404);
+    if (!suggestion) return c.json({ error: "unknown suggestion" }, 404);
 
     try {
-      // De comment die eruit komt heeft author "user": jij hebt hem goedgekeurd,
-      // dus jij bent de auteur. Pas dán telt hij mee en gaat hij naar Claude (§9).
+      // The comment that comes out has author "user": you approved it, so you are
+      // the author. Only then does it count and go to Claude (§9).
       const { review, comment } = addComment(s.review, {
         scope: suggestion.scope,
         body: body?.body ?? suggestion.body,
@@ -315,7 +315,7 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     } | null;
     const decision = body?.decision;
     if (decision !== "approve" && decision !== "request_changes") {
-      return c.json({ error: 'decision moet "approve" of "request_changes" zijn' }, 400);
+      return c.json({ error: 'decision must be "approve" or "request_changes"' }, 400);
     }
 
     try {
@@ -329,8 +329,8 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     }
   });
 
-  // SSE: elke mutatie stuurt de hele review na. Die is klein genoeg, en het
-  // scheelt een heel protocol aan deelmutaties dat toch weer uit de pas loopt.
+  // SSE: every mutation sends the whole review along. It is small enough, and it
+  // saves a whole protocol of partial mutations that would drift out of step anyway.
   app.get("/api/review/:id/events", (c) => {
     const s = resolve(c);
     if (!isSession(s)) return s;
@@ -351,7 +351,7 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
         wake?.();
       });
 
-      // Direct de huidige stand sturen, zodat een verlate verbinding niets mist.
+      // Send the current state right away, so a late connection misses nothing.
       await stream.writeSSE({
         event: "review",
         data: JSON.stringify({ type: "review", review: s.review }),
@@ -359,8 +359,8 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
 
       while (running) {
         if (queue.length === 0) {
-          // Wachten op de volgende mutatie, of op een hartslag zodat een dode
-          // verbinding niet eindeloos blijft hangen.
+          // Wait for the next mutation, or for a heartbeat so a dead connection
+          // does not hang around forever.
           await new Promise<void>((resolve) => {
             wake = resolve;
             setTimeout(resolve, 25_000);
@@ -380,30 +380,30 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     });
   });
 
-  // --- web-UI -------------------------------------------------------------
+  // --- web UI ---------------------------------------------------------------
   app.get("/r/:id", async (c) => {
     const id = c.req.param("id");
-    if (!id || !store.get(id)) return c.text("onbekende review", 404);
+    if (!id || !store.get(id)) return c.text("unknown review", 404);
     const dist = await findWebDist();
     if (!dist) {
       return c.text(
-        "De web-UI is niet gebouwd. Draai `pnpm --filter @reviewgate/web build`.",
+        "The web UI has not been built. Run `pnpm --filter @reviewgate/web build`.",
         503,
       );
     }
     const asset = await readAsset(dist, "index.html");
-    if (!asset) return c.text("index.html ontbreekt in de web-build", 503);
+    if (!asset) return c.text("index.html is missing from the web build", 503);
     return c.body(asset.body, 200, { "content-type": asset.contentType });
   });
 
   app.get("/assets/*", async (c) => {
     const dist = await findWebDist();
-    if (!dist) return c.text("niet gevonden", 404);
+    if (!dist) return c.text("not found", 404);
     const asset = await readAsset(dist, new URL(c.req.url).pathname);
-    if (!asset) return c.text("niet gevonden", 404);
+    if (!asset) return c.text("not found", 404);
     return c.body(asset.body, 200, {
       "content-type": asset.contentType,
-      // Vite hasht assetnamen, dus lang cachen mag.
+      // Vite hashes asset names, so caching them for a long time is fine.
       "cache-control": "public, max-age=31536000, immutable",
     });
   });

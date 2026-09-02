@@ -6,8 +6,8 @@ import { readServerRecord } from "@reviewgate/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 /**
- * De hook draait hier als echt kindproces met een hook-payload op stdin, precies
- * zoals Claude Code hem aanroept (§6, §14).
+ * Here the hook runs as a real child process with a hook payload on stdin, exactly
+ * the way Claude Code invokes it (§6, §14).
  */
 
 const CLI = path.resolve(
@@ -30,7 +30,7 @@ beforeEach(async () => {
   repo = await TestRepo.create();
   await repo.write("src/service.ts", "export const a = 1;\nexport const b = 2;\n");
   await repo.addAll();
-  await repo.commit("basis");
+  await repo.commit("base");
 });
 
 afterEach(async () => {
@@ -40,7 +40,7 @@ afterEach(async () => {
 function payload(command: string): string {
   return JSON.stringify({
     hook_event_name: "PreToolUse",
-    session_id: "sessie-1",
+    session_id: "session-1",
     transcript_path: "/tmp/transcript.jsonl",
     cwd: repo.root,
     tool_name: "Bash",
@@ -84,7 +84,7 @@ async function stageChange(): Promise<void> {
   await repo.addAll();
 }
 
-/** Wacht tot de hook de review heeft aangemaakt en geef hem terug. */
+/** Waits until the hook has created the review, then returns it. */
 async function waitForReview(): Promise<Review> {
   const store = new ReviewStore(path.join(repo.root, ".git"));
   for (let i = 0; i < 200; i++) {
@@ -92,15 +92,15 @@ async function waitForReview(): Promise<Review> {
     if (review) return review;
     await new Promise((r) => setTimeout(r, 100));
   }
-  throw new Error("de hook heeft geen review aangemaakt");
+  throw new Error("the hook created no review");
 }
 
-/** Beslissen via de draaiende server, zoals de UI dat doet. */
+/** Decide through the running server, the way the UI does. */
 async function decide(decision: "approve" | "request_changes", summary?: string): Promise<void> {
   const record = await readServerRecord(path.join(repo.root, ".git"));
-  if (!record) throw new Error("geen server.json");
+  if (!record) throw new Error("no server.json");
 
-  // De sessie-id staat niet in het reviewbestand; we halen hem uit de server.
+  // The session id is not in the review file; we get it from the server.
   const health = await fetch(`http://127.0.0.1:${record.port}/healthz`);
   expect(health.ok).toBe(true);
 
@@ -110,13 +110,13 @@ async function decide(decision: "approve" | "request_changes", summary?: string)
     headers: { "content-type": "application/json", authorization: `Bearer ${session.token}` },
     body: JSON.stringify({ decision, summary: summary ?? null }),
   });
-  if (!res.ok) throw new Error(`decision faalde: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(`decision failed: ${res.status} ${await res.text()}`);
 }
 
 /**
- * De hook maakt de sessie aan; wij moeten hem terugvinden om ermee te praten. Dat
- * kan via het beheerstoken: een tweede sessie op dezelfde diff hangt aan dezelfde
- * persistente review, dus de beslissing komt op de juiste plek terecht.
+ * The hook creates the session; we have to find it again to talk to it. The admin
+ * token lets us: a second session on the same diff hangs off the same persistent
+ * review, so the decision lands in the right place.
  */
 async function sessionIdOf(port: number, serverToken: string): Promise<{ id: string; token: string }> {
   const res = await fetch(`http://127.0.0.1:${port}/api/sessions`, {
@@ -128,25 +128,25 @@ async function sessionIdOf(port: number, serverToken: string): Promise<{ id: str
   return data;
 }
 
-describe("hook — doorlaten", () => {
-  const cases: Array<{ naam: string; command: string; env?: NodeJS.ProcessEnv }> = [
-    { naam: "geen commit", command: "git status --short" },
-    { naam: "push", command: "git push origin main" },
-    { naam: "commit zonder wijzigingen", command: 'git commit -m "leeg"' },
+describe("hook — letting through", () => {
+  const cases: Array<{ name: string; command: string; env?: NodeJS.ProcessEnv }> = [
+    { name: "not a commit", command: "git status --short" },
+    { name: "push", command: "git push origin main" },
+    { name: "commit with no changes", command: 'git commit -m "empty"' },
     {
-      naam: "REVIEWGATE_SKIP staat aan",
+      name: "REVIEWGATE_SKIP is set",
       command: 'git commit -m "x"',
       env: { REVIEWGATE_SKIP: "1" },
     },
   ];
 
-  for (const { naam, command, env } of cases) {
-    it(`${naam} → geen output, dus geen oordeel`, async () => {
+  for (const { name, command, env } of cases) {
+    it(`${name} → no output, so no verdict`, async () => {
       expect(await hookOutput(command, env)).toBeNull();
     });
   }
 
-  it("een ander gereedschap dan Bash raakt de gate niet", async () => {
+  it("a tool other than Bash does not touch the gate", async () => {
     const child = spawn(process.execPath, [CLI, "hook"], {
       cwd: repo.root,
       env: { ...process.env, REVIEWGATE_NO_OPEN: "1" },
@@ -161,9 +161,9 @@ describe("hook — doorlaten", () => {
     expect(stdout.trim()).toBe("");
   });
 
-  it("onleesbare invoer blokkeert niets", async () => {
+  it("unreadable input blocks nothing", async () => {
     const child = spawn(process.execPath, [CLI, "hook"], { cwd: repo.root, windowsHide: true });
-    child.stdin.end("dit is geen json");
+    child.stdin.end("this is not json");
     let stdout = "";
     child.stdout.on("data", (c) => {
       stdout += String(c);
@@ -174,17 +174,17 @@ describe("hook — doorlaten", () => {
   });
 });
 
-describe("hook — blokkeren", () => {
-  it("weigert --no-verify met uitleg, zonder review te openen", async () => {
+describe("hook — blocking", () => {
+  it("refuses --no-verify with an explanation, without opening a review", async () => {
     await stageChange();
     const out = await hookOutput('git commit --no-verify -m "x"');
     expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
     expect(out?.hookSpecificOutput?.permissionDecisionReason).toContain("--no-verify");
   });
 
-  it("geeft de review-feedback terug bij request changes", async () => {
+  it("returns the review feedback on request changes", async () => {
     await stageChange();
-    const hook = runHook('git commit -m "fix: iets"');
+    const hook = runHook('git commit -m "fix: something"');
 
     const review = await waitForReview();
     const record = await readServerRecord(path.join(repo.root, ".git"));
@@ -195,13 +195,13 @@ describe("hook — blokkeren", () => {
       headers: { "content-type": "application/json", authorization: `Bearer ${session.token}` },
       body: JSON.stringify({
         scope: "line",
-        body: "hier ontbreekt de tag-variant",
+        body: "the tag variant is missing here",
         path: "src/service.ts",
         side: "new",
         startLine: 2,
       }),
     });
-    await decide("request_changes", "eerst de invalidatie");
+    await decide("request_changes", "the invalidation first");
 
     const { stdout } = await hook.done;
     const out = JSON.parse(stdout) as HookOutput;
@@ -209,31 +209,31 @@ describe("hook — blokkeren", () => {
 
     expect(out.hookSpecificOutput?.permissionDecision).toBe("deny");
     expect(reason).toContain("# Code review: changes requested");
-    expect(reason).toContain("## Samenvatting\n\neerst de invalidatie");
+    expect(reason).toContain("## Summary\n\nthe invalidation first");
     expect(reason).toContain("## src/service.ts");
-    expect(reason).toContain("- L2: hier ontbreekt de tag-variant");
+    expect(reason).toContain("- L2: the tag variant is missing here");
     expect(review.id).toBeTruthy();
   }, 60_000);
 
-  it("laat de commit door na approve en laat een artifact achter", async () => {
+  it("lets the commit through after approve and leaves an artifact behind", async () => {
     await stageChange();
-    const hook = runHook('git commit -m "fix: iets"');
+    const hook = runHook('git commit -m "fix: something"');
     await waitForReview();
-    await decide("approve", "opzet klopt");
+    await decide("approve", "the shape holds");
 
     const { stdout } = await hook.done;
     const out = JSON.parse(stdout) as HookOutput;
     expect(out.hookSpecificOutput?.permissionDecision).toBe("allow");
-    expect(out.systemMessage).toContain("opzet klopt");
+    expect(out.systemMessage).toContain("the shape holds");
   }, 60_000);
 
-  it("laat een tweede poging op dezelfde diff meteen door via het artifact", async () => {
+  it("lets a second attempt on the same diff straight through via the artifact", async () => {
     await stageChange();
-    const hook = runHook('git commit -m "fix: iets"');
+    const hook = runHook('git commit -m "fix: something"');
     await waitForReview();
 
-    // Approve schrijft het artifact; de hook consumeert het bij zijn eigen ronde.
-    // Voor deze test kijken we ernaar vóór de hook klaar is.
+    // Approve writes the artifact; the hook consumes it on its own round. For this
+    // test we look at it before the hook is finished.
     await decide("approve");
     await hook.done;
 
@@ -241,7 +241,7 @@ describe("hook — blokkeren", () => {
     const [review] = await store.list();
     expect(review?.status).toBe("approved");
 
-    // Het artifact is opgebruikt: een nieuwe poging opent dus weer een review.
+    // The artifact is spent, so a fresh attempt opens a review again.
     const gitDir = path.join(repo.root, ".git");
     const rounds = review?.rounds ?? [];
     const hash = rounds[rounds.length - 1]?.diffHash ?? "";

@@ -7,17 +7,18 @@ export interface OpenArgs {
   context: number;
   includeUntracked: boolean;
   cwd: string;
-  /** Browser niet automatisch openen; de URL komt dan alleen in de terminal. */
+  /** Do not open the browser; the URL then only appears in the terminal. */
   noOpen: boolean;
-  /** Vaste poort in plaats van een ephemeral poort; handig tijdens ontwikkeling. */
+  /** A fixed port instead of an ephemeral one; handy during development. */
   port: number | null;
 }
 
 export class UsageError extends Error {}
 
 /**
- * Eigen argumentparser: het oppervlak is klein en `node:util.parseArgs` kent geen
- * positionele revisie-expressie zoals `main...HEAD`. Geen dependency nodig.
+ * A hand-written argument parser: the surface is small and `node:util.parseArgs` has
+ * no notion of a positional revision expression like `main...HEAD`. No dependency
+ * needed.
  */
 export function parseOpenArgs(argv: readonly string[], cwd: string): OpenArgs {
   const out: OpenArgs = {
@@ -59,31 +60,31 @@ export function parseOpenArgs(argv: readonly string[], cwd: string): OpenArgs {
         break;
       case "--port": {
         const v = argv[++i];
-        if (v === undefined) throw new UsageError("--port verwacht een poortnummer");
+        if (v === undefined) throw new UsageError("--port expects a port number");
         const n = Number.parseInt(v, 10);
-        if (Number.isNaN(n) || n < 0 || n > 65535) throw new UsageError(`ongeldige poort: ${v}`);
+        if (Number.isNaN(n) || n < 0 || n > 65535) throw new UsageError(`invalid port: ${v}`);
         out.port = n;
         break;
       }
       case "-U":
       case "--context": {
         const v = argv[++i];
-        if (v === undefined) throw new UsageError(`${a} verwacht een aantal regels`);
+        if (v === undefined) throw new UsageError(`${a} expects a number of lines`);
         const n = Number.parseInt(v, 10);
-        if (Number.isNaN(n) || n < 0) throw new UsageError(`ongeldige context: ${v}`);
+        if (Number.isNaN(n) || n < 0) throw new UsageError(`invalid context: ${v}`);
         out.context = n;
         break;
       }
       case "-C":
       case "--cwd": {
         const v = argv[++i];
-        if (v === undefined) throw new UsageError(`${a} verwacht een pad`);
+        if (v === undefined) throw new UsageError(`${a} expects a path`);
         out.cwd = v;
         break;
       }
       default: {
-        if (a.startsWith("-")) throw new UsageError(`onbekende optie: ${a}`);
-        if (out.range !== null) throw new UsageError(`meerdere revisies opgegeven: ${a}`);
+        if (a.startsWith("-")) throw new UsageError(`unknown option: ${a}`);
+        if (out.range !== null) throw new UsageError(`several revisions given: ${a}`);
         out.range = a;
         out.scope = "range";
         scopeSet = true;
@@ -93,7 +94,7 @@ export function parseOpenArgs(argv: readonly string[], cwd: string): OpenArgs {
   }
 
   if (out.scope === "range" && out.range === null) {
-    throw new UsageError('scope "range" zonder revisie-expressie');
+    throw new UsageError('scope "range" without a revision expression');
   }
   if (!scopeSet) out.scope = "staged";
   return out;

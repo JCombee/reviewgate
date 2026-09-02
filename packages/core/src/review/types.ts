@@ -1,8 +1,8 @@
 import type { ReviewScope } from "../types.js";
 
 /**
- * Het persistente reviewmodel uit §5. Eén JSON-bestand per review in
- * `.git/reviewgate/reviews/<id>.json` — dat pad zit al buiten versiebeheer.
+ * The persistent review model from §5. One JSON file per review in
+ * `.git/reviewgate/reviews/<id>.json` — that path is already outside version control.
  */
 
 export type ReviewStatus = "open" | "approved" | "changes_requested" | "abandoned";
@@ -21,28 +21,28 @@ export interface Reply {
 
 export interface Comment {
   id: string;
-  /** Ronde waarin de comment geplaatst is. */
+  /** The round this comment was placed in. */
   round: number;
   scope: CommentScope;
-  /** Vragen worden in de feedback met ? gerenderd, zodat Claude ze beantwoordt (§10). */
+  /** Questions are rendered with a ? in the feedback, so Claude answers them (§10). */
   kind: CommentKind;
   path?: string;
   side?: Side;
   startLine?: number;
   endLine?: number;
-  /** De daadwerkelijke regeltekst, voor het terugvinden in een volgende ronde (§5). */
+  /** The actual line text, for finding it again in a later round (§5). */
   anchorSnippet?: string;
   body: string;
   author: Author;
   status: CommentStatus;
-  /** Id van de suggestie waar deze comment uit voortkomt (§9). */
+  /** Id of the suggestion this comment came out of (§9). */
   fromSuggestion?: string;
   replies: Reply[];
   createdAt: string;
 }
 
 export type SuggestionStatus = "pending" | "accepted" | "dismissed";
-export type Severity = "blocker" | "aandachtspunt" | "nit";
+export type Severity = "blocker" | "consideration" | "nit";
 export type DismissedReason = "user" | "auto_duplicate" | "round_closed";
 
 export interface Suggestion {
@@ -76,15 +76,15 @@ export interface Round {
   n: number;
   diffHash: string;
   scope: ReviewScope;
-  /** De message uit het onderschepte commando, of null bij een handmatige review. */
+  /** The message from the intercepted command, or null for a manual review. */
   commitMessage: string | null;
-  /** Door de reviewer aangepaste message; null betekent ongewijzigd (§8). */
+  /** Message adjusted by the reviewer; null means unchanged (§8). */
   editedCommitMessage: string | null;
   claudeSessionId: string | null;
   transcriptPath: string | null;
   decision: Decision | null;
   decidedAt: string | null;
-  /** Vrij tekstveld bij de beslissing: de richting van de review (§8). */
+  /** Free text alongside the decision: the direction of the review (§8). */
   summary: string | null;
 }
 
@@ -101,7 +101,7 @@ export interface Review {
   status: ReviewStatus;
 }
 
-/** Alleen openstaande comments bepalen de knop-state; suggesties nooit (§8). */
+/** Only open comments drive the button state; suggestions never do (§8). */
 export function openComments(review: Review): Comment[] {
   return review.comments.filter((c) => c.status === "open");
 }

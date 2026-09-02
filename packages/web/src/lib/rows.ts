@@ -1,20 +1,20 @@
 import type { DiffHunk, DiffLineType } from "@reviewgate/core/api";
 
 /**
- * Het rijmodel dat beide views renderen. Bewust een pure functie zonder React:
- * context-expansie en de koppeling tussen oude en nieuwe regelnummers zijn precies
- * het soort logica dat je wil kunnen testen zonder een browser.
+ * The row model both views render. Deliberately a pure function without React:
+ * context expansion and the mapping between old and new line numbers are exactly the
+ * kind of logic you want to test without a browser.
  */
 
 export interface LineRow {
   kind: "line";
-  /** Uit een hunk, of bijgeladen via context-expansie. */
+  /** From a hunk, or loaded in through context expansion. */
   source: "hunk" | "expanded";
   type: DiffLineType;
   content: string;
   oldLine: number | null;
   newLine: number | null;
-  /** Positie in het detail, zodat de view de juiste tokens en segmenten vindt. */
+  /** Position in the detail, so the view can find the right tokens and segments. */
   hunkIndex: number | null;
   lineIndex: number | null;
 }
@@ -30,22 +30,22 @@ export interface HunkRow {
 export interface ExpanderRow {
   kind: "expander";
   gapIndex: number;
-  /** Aantal regels dat in dit gat nog verborgen is. */
+  /** How many lines are still hidden in this gap. */
   hidden: number;
-  /** Of er boven en onder dit gat een hunk staat; bepaalt welke knoppen zin hebben. */
+  /** Whether a hunk sits above and below this gap; decides which buttons make sense. */
   hasAbove: boolean;
   hasBelow: boolean;
 }
 
 export type Row = LineRow | HunkRow | ExpanderRow;
 
-/** Hoeveel regels een gap-expansie per klik onthult (§8). */
+/** How many lines one click of a gap expander reveals (§8). */
 export const EXPAND_STEP = 10;
 
 export interface GapExpansion {
-  /** Regels onthuld vanaf de bovenkant van het gat. */
+  /** Lines revealed from the top of the gap. */
   top: number;
-  /** Regels onthuld vanaf de onderkant van het gat. */
+  /** Lines revealed from the bottom of the gap. */
   bottom: number;
 }
 
@@ -55,7 +55,7 @@ export interface BuildRowsInput {
   hunks: readonly DiffHunk[];
   oldLineCount: number;
   newLineCount: number;
-  /** Volledige bestandsinhoud per regel; null als die kant niet beschikbaar is. */
+  /** Full file content per line; null when that side is unavailable. */
   linesOld: readonly string[] | null;
   linesNew: readonly string[] | null;
   expansion: ExpansionState;
@@ -72,7 +72,7 @@ interface Gap {
   hasBelow: boolean;
 }
 
-/** De gaten tussen de hunks, inclusief het gat vóór de eerste en na de laatste. */
+/** The gaps between the hunks, including the one before the first and after the last. */
 export function computeGaps(input: {
   hunks: readonly DiffHunk[];
   oldLineCount: number;
@@ -98,8 +98,8 @@ export function computeGaps(input: {
       hasAbove: i > 0,
       hasBelow: true,
     });
-    // Een hunk met 0 regels aan één kant verbruikt aan die kant niets; git noemt
-    // dan het regelnummer ervóór.
+    // A hunk with 0 lines on one side consumes nothing there; git then names the line
+    // number before it.
     lastOld = h.oldLines === 0 ? h.oldStart : h.oldStart + h.oldLines - 1;
     lastNew = h.newLines === 0 ? h.newStart : h.newStart + h.newLines - 1;
   });
@@ -168,9 +168,9 @@ function gapRows(gap: Gap, input: BuildRowsInput): Row[] {
   const remaining = gap.hidden - top - bottom;
 
   const rows: Row[] = [];
-  // Van boven af tellen we vanaf het begin van het gat, van onder af vanaf de hunk
-  // eronder. In een echte diff is een gat aan beide kanten even lang, dus vallen
-  // die twee samen; bij een scheve gaptelling blijft de kant die je uitklapt kloppen.
+  // From the top we count from the start of the gap, from the bottom we count from the
+  // hunk below it. In a real diff a gap is the same length on both sides, so the two
+  // coincide; with a lopsided gap count the side you expand still holds up.
   for (let k = 0; k < top; k++) {
     rows.push(contextRow(gap.oldStart + k, gap.newStart + k, gap, input));
   }
@@ -189,7 +189,7 @@ function gapRows(gap: Gap, input: BuildRowsInput): Row[] {
   return rows;
 }
 
-/** Eén onthulde contextregel, met de nummers van beide kanten erbij. */
+/** One revealed context line, carrying the numbers of both sides. */
 function contextRow(
   oldLine: number,
   newLine: number,
@@ -223,9 +223,9 @@ export interface PairRow {
 export type SplitRow = HunkRow | ExpanderRow | PairRow;
 
 /**
- * Zet de unified rijen om in linker/rechter paren. Een blok verwijderde regels
- * wordt positioneel gekoppeld aan het blok toegevoegde regels erna, wat dezelfde
- * koppeling is als die de intraline-highlight gebruikt.
+ * Turns the unified rows into left/right pairs. A block of deleted lines is paired
+ * positionally with the block of added lines after it, which is the same pairing the
+ * intraline highlight uses.
  */
 export function toSplitRows(rows: readonly Row[]): SplitRow[] {
   const out: SplitRow[] = [];
@@ -270,7 +270,7 @@ export function toSplitRows(rows: readonly Row[]): SplitRow[] {
   return out;
 }
 
-/** Volgende expansiestand na een klik op een van de knoppen van een gat. */
+/** The next expansion state after a click on one of a gap's buttons. */
 export function expand(
   current: GapExpansion | undefined,
   hidden: number,

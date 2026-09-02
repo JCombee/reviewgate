@@ -3,12 +3,12 @@ import { useEffect, useState, type KeyboardEvent } from "react";
 import type { Ctx } from "../api.js";
 
 /**
- * De actiebalk onderaan: de kern van het scherm (§8).
+ * The action bar at the bottom: the heart of the screen (§8).
  *
- * Eén knop die van rol wisselt, geen twee knoppen naast elkaar. Met openstaande
- * comments is Request changes de enige mogelijke actie; wil je toch approven, dan
- * resolve of verwijder je die comments eerst. Dat is een bewuste handeling die in
- * de historie staat, geen afwijking die je wegklikt.
+ * One button that switches roles, not two buttons side by side. With open comments,
+ * Request changes is the only possible action; if you do want to approve, you resolve
+ * or delete those comments first. That is a deliberate act that shows up in the
+ * history, not a deviation you click away.
  */
 export function ActionBar({
   ctx,
@@ -53,7 +53,7 @@ export function ActionBar({
     }
   };
 
-  // ⌘⇧↵ voert de primaire actie uit, waar de focus ook staat (§8).
+  // ⌘⇧↵ performs the primary action, wherever the focus happens to be (§8).
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Enter" && e.shiftKey && (e.metaKey || e.ctrlKey)) {
@@ -81,10 +81,10 @@ export function ActionBar({
           }}
         >
           {round?.decision === "approve"
-            ? "Goedgekeurd — de commit loopt door."
-            : "Changes requested — de feedback staat in de sessie."}
+            ? "Approved — the commit goes through."
+            : "Changes requested — the feedback is in the session."}
         </span>
-        <span className="text-[var(--rg-text-faint)]">Dit venster kan dicht.</span>
+        <span className="text-[var(--rg-text-faint)]">You can close this window.</span>
       </footer>
     );
   }
@@ -92,16 +92,16 @@ export function ActionBar({
   return (
     <footer className="flex h-12 shrink-0 items-center gap-3 border-t border-[var(--rg-border)] bg-[var(--rg-bg-raised)] px-3">
       <span className="tabular-nums text-[var(--rg-text-muted)]">
-        {open.length} openstaand
-        {outdated.length > 0 && ` · ${outdated.length} verouderd`}
+        {open.length} open
+        {outdated.length > 0 && ` · ${outdated.length} outdated`}
       </span>
 
       <input
         value={summary}
         onChange={(e) => setSummary(e.target.value)}
         onKeyDown={onSummaryKey}
-        placeholder="Richting voor de volgende ronde, optioneel"
-        aria-label="Samenvatting"
+        placeholder="Direction for the next round, optional"
+        aria-label="Summary"
         className="min-w-0 flex-1 rounded border border-[var(--rg-border)] bg-[var(--rg-bg)] px-2 py-1"
       />
 
@@ -112,8 +112,8 @@ export function ActionBar({
       )}
 
       {/*
-        Vaste breedte voor het langste label, zodat de wissel alleen kleur en tekst
-        verandert en niets verspringt (§8).
+        A fixed width for the longest label, so the switch changes only colour and text
+        and nothing jumps (§8).
       */}
       <button
         type="button"

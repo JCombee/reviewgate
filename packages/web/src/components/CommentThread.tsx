@@ -5,13 +5,13 @@ import { CommentForm } from "./CommentForm.jsx";
 
 const STATUS_LABEL: Record<Comment["status"], string> = {
   open: "open",
-  resolved: "opgelost",
-  outdated: "verouderd",
+  resolved: "resolved",
+  outdated: "outdated",
 };
 
 /**
- * Eén discussie: de comment, zijn reacties, en de acties erop. Vorm en toon volgen
- * GitLab-discussions: compact, met de status en de ronde als context.
+ * One discussion: the comment, its replies, and the actions on it. Shape and tone
+ * follow GitLab discussions: compact, with the status and the round as context.
  */
 export function CommentThread({ comment, api }: { comment: Comment; api: ReviewApi }) {
   const [replying, setReplying] = useState(false);
@@ -37,18 +37,18 @@ export function CommentThread({ comment, api }: { comment: Comment; api: ReviewA
       data-comment-id={comment.id}
     >
       <div className="flex items-center gap-2 text-[var(--rg-text-faint)]">
-        <span>{comment.author === "user" ? "jij" : "agent"}</span>
+        <span>{comment.author === "user" ? "you" : "agent"}</span>
         <span>·</span>
-        <span>ronde {comment.round}</span>
+        <span>round {comment.round}</span>
         <span>·</span>
         <span>{STATUS_LABEL[comment.status]}</span>
         {comment.kind === "question" && (
           <span
             className="rounded px-1"
             style={{ color: "var(--rg-status-renamed)" }}
-            title="Een vraag; Claude beantwoordt hem in plaats van hem te fixen"
+            title="A question; Claude answers it instead of fixing it"
           >
-            vraag
+            question
           </span>
         )}
         {comment.scope === "line" && comment.startLine !== undefined && (
@@ -64,7 +64,7 @@ export function CommentThread({ comment, api }: { comment: Comment; api: ReviewA
         <div className="mt-1">
           <CommentForm
             initialBody={comment.body}
-            submitLabel="Bewaar"
+            submitLabel="Save"
             withKind={false}
             onSubmit={async (body) => {
               await api.editComment(comment.id, body);
@@ -80,7 +80,7 @@ export function CommentThread({ comment, api }: { comment: Comment; api: ReviewA
       {comment.replies.map((reply, i) => (
         <div key={i} className="mt-2 border-l-2 border-[var(--rg-border)] pl-2">
           <p className="text-[var(--rg-text-faint)]">
-            {reply.author === "user" ? "jij" : "agent"}
+            {reply.author === "user" ? "you" : "agent"}
           </p>
           <p className="whitespace-pre-wrap">{reply.body}</p>
         </div>
@@ -89,9 +89,9 @@ export function CommentThread({ comment, api }: { comment: Comment; api: ReviewA
       {replying ? (
         <div className="mt-2">
           <CommentForm
-            submitLabel="Reageer"
+            submitLabel="Reply"
             withKind={false}
-            placeholder="Reactie…"
+            placeholder="Reply…"
             onSubmit={async (body) => {
               await api.reply(comment.id, body);
               setReplying(false);
@@ -102,7 +102,7 @@ export function CommentThread({ comment, api }: { comment: Comment; api: ReviewA
       ) : (
         <div className="mt-2 flex gap-3 text-[var(--rg-text-muted)]">
           <button type="button" onClick={() => setReplying(true)}>
-            Reageer
+            Reply
           </button>
           {comment.status !== "outdated" && (
             <button
@@ -112,18 +112,18 @@ export function CommentThread({ comment, api }: { comment: Comment; api: ReviewA
                 void act(() => api.setResolved(comment.id, comment.status !== "resolved"))
               }
             >
-              {comment.status === "resolved" ? "Heropen" : "Resolve"}
+              {comment.status === "resolved" ? "Reopen" : "Resolve"}
             </button>
           )}
           <button type="button" onClick={() => setEditing(true)}>
-            Bewerk
+            Edit
           </button>
           <button
             type="button"
             disabled={busy}
             onClick={() => void act(() => api.deleteComment(comment.id))}
           >
-            Verwijder
+            Delete
           </button>
         </div>
       )}

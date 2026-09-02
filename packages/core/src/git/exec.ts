@@ -20,26 +20,26 @@ export class GitError extends Error {
 
 export interface RunGitOptions {
   cwd: string;
-  /** Exitcodes die geen fout zijn. `git diff --exit-code` en `--no-index` gebruiken 1. */
+  /** Exit codes that are not failures. `git diff --exit-code` and `--no-index` use 1. */
   okCodes?: readonly number[];
-  /** Grote diffs passen niet in de node-default van 1 MB. */
+  /** Large diffs do not fit in node's 1 MB default. */
   maxBuffer?: number;
   env?: NodeJS.ProcessEnv;
 }
 
 /**
- * Elke git-aanroep loopt hierlangs: `execFile` met een argv-array en `shell: false`,
- * nooit een samengestelde commandostring. Daarmee spelen quoting, spaties in paden en
- * shellverschillen tussen platforms geen rol (§4).
+ * Every git call goes through here: `execFile` with an argv array and `shell: false`,
+ * never a composed command string. That way quoting, spaces in paths and shell
+ * differences between platforms play no part (§4).
  */
 export function runGit(
   args: readonly string[],
   opts: RunGitOptions,
 ): Promise<GitExecResult> {
   const okCodes = opts.okCodes ?? [0];
-  // -c overrides gaan vóór het subcommando en gelden voor elke aanroep:
-  // quotePath uit zodat niet-ASCII paden niet als \xxx-escapes terugkomen,
-  // renamedetectie aan zodat de parser renames als rename ziet.
+  // The -c overrides go before the subcommand and apply to every call: quotePath off
+  // so non-ASCII paths do not come back as \xxx escapes, rename detection on so the
+  // parser sees renames as renames.
   const full = [
     "-c",
     "core.quotePath=false",
@@ -72,19 +72,14 @@ export function runGit(
 
         if (err && (err as { code?: unknown }).code === "ENOENT") {
           reject(
-            new GitError(
-              "git is niet gevonden op PATH",
-              full,
-              127,
-              stderr || String(err),
-            ),
+            new GitError("git was not found on PATH", full, 127, stderr || String(err)),
           );
           return;
         }
         if (!okCodes.includes(code)) {
           reject(
             new GitError(
-              `git ${args.join(" ")} faalde met code ${code}: ${stderr.trim()}`,
+              `git ${args.join(" ")} failed with code ${code}: ${stderr.trim()}`,
               full,
               code,
               stderr,
@@ -98,14 +93,14 @@ export function runGit(
   });
 }
 
-/** Splitst git-output in regels, CRLF-veilig en zonder lege slotregel. */
+/** Splits git output into lines, CRLF-safe and without a trailing empty line. */
 export function splitLines(out: string): string[] {
   const lines = out.split(/\r?\n/);
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   return lines;
 }
 
-/** Splitst NUL-gescheiden output (`-z`), zonder lege slotwaarde. */
+/** Splits NUL-separated output (`-z`), without a trailing empty value. */
 export function splitNul(out: string): string[] {
   const parts = out.split("\0");
   if (parts.length > 0 && parts[parts.length - 1] === "") parts.pop();

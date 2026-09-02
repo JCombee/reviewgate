@@ -6,15 +6,15 @@ import { readServerRecord } from "@reviewgate/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 /**
- * Meerdere rondes per review (§13, M5). De acceptatie-eis: een comment uit ronde 1
- * die door de fix van Claude verschoven is, staat in ronde 2 op de juiste regel.
+ * Several rounds per review (§13, M5). The acceptance requirement: a comment from
+ * round 1 that Claude's fix shifted sits on the right line in round 2.
  */
 
 const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../bin/reviewgate.mjs");
 
 let repo: TestRepo;
 
-const RONDE_1 = [
+const ROUND_1 = [
   "export function handle(order) {",
   "  const key = `order:${order.id}`;",
   "  cache.forget(key);",
@@ -23,10 +23,10 @@ const RONDE_1 = [
   "",
 ].join("\n");
 
-/** De fix voegt vijf regels bóven de becommentarieerde regel toe. */
-const RONDE_2 = [
+/** The fix adds five lines above the commented line. */
+const ROUND_2 = [
   "function guard(order) {",
-  "  if (!order) throw new Error('geen order');",
+  "  if (!order) throw new Error('no order');",
   "  return order;",
   "}",
   "",
@@ -42,7 +42,7 @@ beforeEach(async () => {
   repo = await TestRepo.create();
   await repo.write("service.ts", "export const leeg = true;\n");
   await repo.addAll();
-  await repo.commit("basis");
+  await repo.commit("base");
 });
 
 afterEach(async () => {
@@ -72,18 +72,18 @@ function runHook(command: string): Promise<string> {
 const store = () => new ReviewStore(path.join(repo.root, ".git"));
 
 async function waitForRound(n: number): Promise<Review> {
-  // Ruim bemeten: onder een volle testsuite draaien meerdere hooks tegelijk.
+  // Generously sized: under a full test suite several hooks run at once.
   for (let i = 0; i < 600; i++) {
     const [review] = await store().list();
     if (review && review.rounds.length >= n) return review;
     await new Promise((r) => setTimeout(r, 100));
   }
-  throw new Error(`ronde ${n} kwam er niet`);
+  throw new Error(`round ${n} never arrived`);
 }
 
 async function session(): Promise<{ port: number; id: string; token: string }> {
   const record = await readServerRecord(path.join(repo.root, ".git"));
-  if (!record) throw new Error("geen server.json");
+  if (!record) throw new Error("no server.json");
   const res = await fetch(`http://127.0.0.1:${record.port}/api/sessions`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${record.serverToken}` },
@@ -102,81 +102,81 @@ async function call(path: string, body: unknown): Promise<Response> {
   });
 }
 
-describe("rondes", () => {
-  it("verplaatst een comment uit ronde 1 mee naar zijn nieuwe regel in ronde 2", async () => {
-    // Ronde 1: comment op regel 3, dan changes requested.
-    await repo.write("service.ts", RONDE_1);
+describe("rounds", () => {
+  it("moves a comment from round 1 along to its new line in round 2", async () => {
+    // Round 1: a comment on line 3, then changes requested.
+    await repo.write("service.ts", ROUND_1);
     await repo.addAll();
-    const eerste = runHook('git commit -m "fix: cache"');
+    const first = runHook('git commit -m "fix: cache"');
     await waitForRound(1);
 
     const created = await call("/comments", {
       scope: "line",
-      body: "hier ontbreekt de tag-variant",
+      body: "the tag variant is missing here",
       path: "service.ts",
       side: "new",
       startLine: 3,
       anchorSnippet: "  cache.forget(key);",
     });
     expect(created.status).toBe(200);
-    await call("/decision", { decision: "request_changes", summary: "eerst de invalidatie" });
+    await call("/decision", { decision: "request_changes", summary: "the invalidation first" });
 
-    const verdict = JSON.parse(await eerste) as {
+    const verdict = JSON.parse(await first) as {
       hookSpecificOutput: { permissionDecision: string };
     };
     expect(verdict.hookSpecificOutput.permissionDecision).toBe("deny");
 
-    // Ronde 2: de fix schuift de regel vijf omlaag.
-    await repo.write("service.ts", RONDE_2);
+    // Round 2: the fix pushes the line five down.
+    await repo.write("service.ts", ROUND_2);
     await repo.addAll();
-    const tweede = runHook('git commit -m "fix: cache, met guard"');
+    const second = runHook('git commit -m "fix: cache, with a guard"');
     const review = await waitForRound(2);
 
     expect(review.rounds).toHaveLength(2);
     expect(review.rounds[1]?.n).toBe(2);
     expect(review.comments).toHaveLength(1);
-    // Regel 3 is regel 8 geworden, en de comment staat daar nu ook.
+    // Line 3 has become line 8, and the comment now sits there too.
     expect(review.comments[0]).toMatchObject({ startLine: 8, status: "open", round: 1 });
 
     await call("/decision", { decision: "request_changes" });
-    const tweedeVerdict = JSON.parse(await tweede) as {
+    const secondVerdict = JSON.parse(await second) as {
       hookSpecificOutput: { permissionDecisionReason: string };
     };
-    const reason = tweedeVerdict.hookSpecificOutput.permissionDecisionReason;
-    expect(reason).toContain("(ronde 2)");
-    expect(reason).toContain("L8: hier ontbreekt de tag-variant");
-    expect(reason).toContain("## Nog open uit eerdere rondes");
+    const reason = secondVerdict.hookSpecificOutput.permissionDecisionReason;
+    expect(reason).toContain("(round 2)");
+    expect(reason).toContain("L8: the tag variant is missing here");
+    expect(reason).toContain("## Still open from earlier rounds");
   }, 120_000);
 
-  it("markeert een comment als verouderd wanneer de regel verdwenen is", async () => {
-    await repo.write("service.ts", RONDE_1);
+  it("marks a comment as outdated when the line is gone", async () => {
+    await repo.write("service.ts", ROUND_1);
     await repo.addAll();
-    const eerste = runHook('git commit -m "fix: cache"');
+    const first = runHook('git commit -m "fix: cache"');
     await waitForRound(1);
 
     await call("/comments", {
       scope: "line",
-      body: "deze regel klopt niet",
+      body: "this line is wrong",
       path: "service.ts",
       side: "new",
       startLine: 3,
       anchorSnippet: "  cache.forget(key);",
     });
     await call("/decision", { decision: "request_changes" });
-    await eerste;
+    await first;
 
-    // De regel is helemaal weg in ronde 2.
+    // The line is gone entirely in round 2.
     await repo.write("service.ts", "export function handle(order) {\n  return order;\n}\n");
     await repo.addAll();
-    const tweede = runHook('git commit -m "fix: regel weg"');
+    const second = runHook('git commit -m "fix: line removed"');
     const review = await waitForRound(2);
 
     expect(review.comments[0]?.status).toBe("outdated");
 
-    // Verouderd telt niet meer mee, dus approve mag weer.
+    // Outdated no longer counts, so approve is allowed again.
     const res = await call("/decision", { decision: "approve" });
     expect(res.status).toBe(200);
-    const verdict = JSON.parse(await tweede) as {
+    const verdict = JSON.parse(await second) as {
       hookSpecificOutput: { permissionDecision: string };
     };
     expect(verdict.hookSpecificOutput.permissionDecision).toBe("allow");

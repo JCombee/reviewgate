@@ -9,7 +9,7 @@ const line = (
   newLine: number | null,
 ) => ({ type, content, oldLine, newLine, noNewlineAtEof: false });
 
-/** Bestand van 30 regels met één hunk rond regel 11. */
+/** A file of 30 lines with one hunk around line 11. */
 const hunk: DiffHunk = {
   oldStart: 11,
   oldLines: 3,
@@ -17,14 +17,14 @@ const hunk: DiffHunk = {
   newLines: 3,
   section: "function f()",
   lines: [
-    line("context", "regel 11", 11, 11),
-    line("del", "oud", 12, null),
-    line("add", "nieuw", null, 12),
-    line("context", "regel 13", 13, 13),
+    line("context", "line 11", 11, 11),
+    line("del", "before", 12, null),
+    line("add", "after", null, 12),
+    line("context", "line 13", 13, 13),
   ],
 };
 
-const fileLines = (n: number, prefix = "regel ") =>
+const fileLines = (n: number, prefix = "line ") =>
   Array.from({ length: n }, (_, i) => `${prefix}${i + 1}`);
 
 const base = {
@@ -37,14 +37,14 @@ const base = {
 };
 
 describe("computeGaps", () => {
-  it("vindt het gat vóór en na de hunk", () => {
+  it("finds the gap before and after the hunk", () => {
     const gaps = computeGaps({ hunks: [hunk], oldLineCount: 30, newLineCount: 30 });
     expect(gaps).toHaveLength(2);
     expect(gaps[0]).toMatchObject({ index: 0, oldStart: 1, oldEnd: 10, hidden: 10, hasAbove: false });
     expect(gaps[1]).toMatchObject({ index: 1, oldStart: 14, oldEnd: 30, hidden: 17, hasBelow: false });
   });
 
-  it("telt een hunk zonder oude regels niet mee aan de oude kant", () => {
+  it("does not count a hunk without old lines on the old side", () => {
     const added: DiffHunk = {
       oldStart: 0,
       oldLines: 0,
@@ -58,7 +58,7 @@ describe("computeGaps", () => {
     expect(gaps[1]).toMatchObject({ oldStart: 1, newStart: 3, hidden: 0 });
   });
 
-  it("geeft geen gat als de hunk het hele bestand beslaat", () => {
+  it("reports no gap when the hunk spans the whole file", () => {
     const whole: DiffHunk = {
       oldStart: 1,
       oldLines: 2,
@@ -73,7 +73,7 @@ describe("computeGaps", () => {
 });
 
 describe("buildRows", () => {
-  it("toont per gat een expander en de regels van de hunk", () => {
+  it("shows an expander per gap plus the lines of the hunk", () => {
     const rows = buildRows(base);
     expect(rows.map((r) => r.kind)).toEqual([
       "expander",
@@ -88,17 +88,17 @@ describe("buildRows", () => {
     expect((rows[6] as { hidden: number }).hidden).toBe(17);
   });
 
-  it("onthult regels vanaf de onderkant van het gat en houdt de rest verborgen", () => {
+  it("reveals lines from the bottom of the gap and keeps the rest hidden", () => {
     const rows = buildRows({ ...base, expansion: { 0: { top: 0, bottom: 4 } } });
     const kinds = rows.slice(0, 6).map((r) => r.kind);
     expect(kinds).toEqual(["expander", "line", "line", "line", "line", "hunk"]);
     const revealed = rows.slice(1, 5) as LineRow[];
     expect(revealed.map((r) => r.newLine)).toEqual([7, 8, 9, 10]);
-    expect(revealed.map((r) => r.content)).toEqual(["regel 7", "regel 8", "regel 9", "regel 10"]);
+    expect(revealed.map((r) => r.content)).toEqual(["line 7", "line 8", "line 9", "line 10"]);
     expect(revealed.every((r) => r.source === "expanded" && r.type === "context")).toBe(true);
   });
 
-  it("onthult regels vanaf de bovenkant van het gat", () => {
+  it("reveals lines from the top of the gap", () => {
     const rows = buildRows({ ...base, expansion: { 0: { top: 3, bottom: 0 } } });
     const revealed = rows.slice(0, 3) as LineRow[];
     expect(revealed.map((r) => r.newLine)).toEqual([1, 2, 3]);
@@ -106,19 +106,19 @@ describe("buildRows", () => {
     expect((rows[3] as { hidden: number }).hidden).toBe(7);
   });
 
-  it("laat de expander weg zodra het gat volledig open staat", () => {
+  it("drops the expander once the gap is fully open", () => {
     const rows = buildRows({ ...base, expansion: { 0: { top: 10, bottom: 0 } } });
     expect(rows.slice(0, 10).every((r) => r.kind === "line")).toBe(true);
     expect(rows[10]?.kind).toBe("hunk");
   });
 
-  it("laat expanders weg als er geen bestandsinhoud beschikbaar is", () => {
+  it("drops expanders when no file content is available", () => {
     const rows = buildRows({ ...base, linesOld: null, linesNew: null });
     expect(rows.some((r) => r.kind === "expander")).toBe(false);
   });
 
-  it("houdt oude en nieuwe nummers uit elkaar na een eerdere hunk", () => {
-    // De eerste hunk voegt twee regels toe; daarna lopen de nummers twee uit elkaar.
+  it("keeps old and new numbers apart after an earlier hunk", () => {
+    // The first hunk adds two lines; after that the numbers run two apart.
     const first: DiffHunk = {
       oldStart: 5,
       oldLines: 1,
@@ -126,7 +126,7 @@ describe("buildRows", () => {
       newLines: 3,
       section: "",
       lines: [
-        line("context", "regel 5", 5, 5),
+        line("context", "line 5", 5, 5),
         line("add", "extra a", null, 6),
         line("add", "extra b", null, 7),
       ],
@@ -137,7 +137,7 @@ describe("buildRows", () => {
       newStart: 22,
       newLines: 1,
       section: "",
-      lines: [line("context", "regel 20", 20, 22)],
+      lines: [line("context", "line 20", 20, 22)],
     };
 
     const rows = buildRows({
@@ -146,7 +146,7 @@ describe("buildRows", () => {
       newLineCount: 32,
       linesOld: fileLines(30),
       linesNew: fileLines(32),
-      // Gat 1 ligt tussen de twee hunks: oud 6..19, nieuw 8..21.
+      // Gap 1 sits between the two hunks: old 6..19, new 8..21.
       expansion: { 1: { top: 2, bottom: 2 } },
     });
 
@@ -161,19 +161,19 @@ describe("buildRows", () => {
 });
 
 describe("toSplitRows", () => {
-  it("koppelt del- en add-blokken positioneel", () => {
+  it("pairs del and add blocks positionally", () => {
     const rows = buildRows(base).filter((r) => r.kind !== "expander");
     const split = toSplitRows(rows);
     expect(split[0]?.kind).toBe("hunk");
     const pairs = split.filter((r) => r.kind === "pair");
     expect(pairs).toHaveLength(3);
     expect(pairs[1]).toMatchObject({
-      left: { type: "del", content: "oud" },
-      right: { type: "add", content: "nieuw" },
+      left: { type: "del", content: "before" },
+      right: { type: "add", content: "after" },
     });
   });
 
-  it("vult aan met lege kanten bij ongelijke blokken", () => {
+  it("pads with empty sides for unequal blocks", () => {
     const rows: Row[] = [
       { kind: "line", source: "hunk", type: "del", content: "a", oldLine: 1, newLine: null, hunkIndex: 0, lineIndex: 0 },
       { kind: "line", source: "hunk", type: "add", content: "b", oldLine: null, newLine: 1, hunkIndex: 0, lineIndex: 1 },
@@ -184,7 +184,7 @@ describe("toSplitRows", () => {
     expect(split[1]).toMatchObject({ left: null, right: { content: "c" } });
   });
 
-  it("zet een contextregel aan beide kanten neer", () => {
+  it("puts a context line on both sides", () => {
     const rows: Row[] = [
       { kind: "line", source: "hunk", type: "context", content: "x", oldLine: 3, newLine: 3, hunkIndex: 0, lineIndex: 0 },
     ];
@@ -194,17 +194,17 @@ describe("toSplitRows", () => {
 });
 
 describe("expand", () => {
-  it("stapt met tien regels tegelijk", () => {
+  it("steps ten lines at a time", () => {
     expect(expand(undefined, 25, "bottom")).toEqual({ top: 0, bottom: 10 });
     expect(expand({ top: 0, bottom: 10 }, 25, "bottom")).toEqual({ top: 0, bottom: 20 });
   });
 
-  it("gaat nooit voorbij wat er verborgen is", () => {
+  it("never goes past what is hidden", () => {
     expect(expand({ top: 0, bottom: 20 }, 25, "bottom")).toEqual({ top: 0, bottom: 25 });
     expect(expand({ top: 0, bottom: 25 }, 25, "top")).toEqual({ top: 0, bottom: 25 });
   });
 
-  it("opent het hele gat in één keer", () => {
+  it("opens the whole gap at once", () => {
     expect(expand({ top: 2, bottom: 3 }, 40, "all")).toEqual({ top: 40, bottom: 0 });
   });
 });

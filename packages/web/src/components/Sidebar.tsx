@@ -12,7 +12,7 @@ export function Sidebar({
   activeIndex: number;
   onSelect: (index: number) => void;
 }) {
-  /** Openstaande comments per bestand, zodat je ziet waar nog iets ligt. */
+  /** Open comments per file, so you can see where something is still waiting. */
   const openPerFile = new Map<string, number>();
   for (const c of review.comments) {
     if (c.scope !== "line" || c.status !== "open" || !c.path) continue;
@@ -20,9 +20,9 @@ export function Sidebar({
   }
 
   return (
-    <nav aria-label="Bestanden">
+    <nav aria-label="Files">
       <p className="px-3 py-2 text-[11px] uppercase tracking-wide text-[var(--rg-text-faint)]">
-        Bestanden
+        Files
       </p>
       <ul>
         {summary.files.map((f) => {
@@ -48,7 +48,7 @@ export function Sidebar({
                   <span
                     className="shrink-0 tabular-nums"
                     style={{ color: "var(--rg-changes)" }}
-                    title={`${open} openstaande comment(s)`}
+                    title={`${open} open comment(s)`}
                   >
                     {open}
                   </span>

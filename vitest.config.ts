@@ -3,15 +3,15 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["packages/*/src/**/*.test.ts"],
-    // De Playwright-specs in e2e/ hebben hun eigen runner.
+    // The Playwright specs in e2e/ have their own runner.
     exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"],
-    // Integratietests zetten echte git-repo's op in een tempdir; die zijn traag
-    // op Windows, dus ruimer dan de vitest-default van 5s.
+    // Integration tests set up real git repos in a temp dir; those are slow on
+    // Windows, so wider than the vitest default of 5s.
     testTimeout: 30_000,
     hookTimeout: 30_000,
     env: {
-      // De automatische pass start een echte agent met de testrepo als cwd. Die
-      // houdt de map vast en heeft auth nodig; in tests hoort hij dus uit (§9).
+      // The automatic pass starts a real agent with the test repo as its cwd. That
+      // holds on to the directory and needs auth, so in tests it stays off (§9).
       REVIEWGATE_AUTO_REVIEW: "0",
       REVIEWGATE_NO_OPEN: "1",
     },

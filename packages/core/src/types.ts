@@ -1,25 +1,25 @@
 /**
- * Getypeerde diffstructuur. Dit is het contract tussen core, server en web:
- * de parser produceert het, de UI rendert het, anchoring werkt erop (§5).
+ * The typed diff structure. This is the contract between core, server and web:
+ * the parser produces it, the UI renders it, anchoring works on it (§5).
  *
- * Alle paden zijn POSIX (forward slashes), zoals git ze aanlevert. Converteren naar
- * een platformpad gebeurt alleen op het moment van echt filesystem-contact (§4).
+ * All paths are POSIX (forward slashes), the way git hands them over. Converting to
+ * a platform path happens only at the moment of actual filesystem contact (§4).
  */
 
-/** Welke verzameling wijzigingen onder review staat (§2). */
+/** Which set of changes is under review (§2). */
 export type ReviewScope = "staged" | "working" | "amend" | "range";
 
 export type DiffLineType = "context" | "add" | "del";
 
 export interface DiffLine {
   type: DiffLineType;
-  /** Regelinhoud zonder het +/-/spatie-markerteken. */
+  /** Line content without the +/-/space marker character. */
   content: string;
-  /** Regelnummer in de oude versie, null voor toegevoegde regels. */
+  /** Line number in the old version, null for added lines. */
   oldLine: number | null;
-  /** Regelnummer in de nieuwe versie, null voor verwijderde regels. */
+  /** Line number in the new version, null for deleted lines. */
   newLine: number | null;
-  /** Git meldde "\ No newline at end of file" direct na deze regel. */
+  /** Git reported "\ No newline at end of file" right after this line. */
   noNewlineAtEof: boolean;
 }
 
@@ -28,7 +28,7 @@ export interface DiffHunk {
   oldLines: number;
   newStart: number;
   newLines: number;
-  /** De sectiecontext die git achter de tweede `@@` zet, bijv. een functienaam. */
+  /** The section context git puts after the second `@@`, e.g. a function name. */
   section: string;
   lines: DiffLine[];
 }
@@ -43,18 +43,18 @@ export type FileStatus =
 
 export interface DiffFile {
   /**
-   * Het pad waaronder het bestand in de review bekend staat: het nieuwe pad,
-   * of het oude pad als het bestand verwijderd is. Stabiele sleutel voor comments.
+   * The path this file is known by within the review: the new path, or the old path
+   * if the file was deleted. A stable key for comments.
    */
   path: string;
   oldPath: string | null;
   newPath: string | null;
   status: FileStatus;
-  /** Git kon geen tekstuele diff maken; er zijn dus geen hunks (§12). */
+  /** Git could not produce a textual diff, so there are no hunks (§12). */
   binary: boolean;
-  /** Submodule-pointer in plaats van een gewoon bestand (§12). */
+  /** A submodule pointer rather than an ordinary file (§12). */
   submodule: boolean;
-  /** Percentage bij rename/copy, anders null. */
+  /** Percentage for a rename or copy, null otherwise. */
   similarity: number | null;
   oldMode: string | null;
   newMode: string | null;
@@ -68,6 +68,6 @@ export interface Diff {
   files: DiffFile[];
   additions: number;
   deletions: number;
-  /** Som van alle + en − regels: de basis voor de suggestie-cap (§9). */
+  /** Sum of all + and − lines: the basis for the suggestion cap (§9). */
   changedLines: number;
 }

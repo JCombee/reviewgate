@@ -1,7 +1,7 @@
 import type { CreateCommentBody, PassStatus, Review, ReviewEvent } from "@reviewgate/core/api";
 import type { Ctx } from "../api.js";
 
-/** Alle mutaties op de review, in één object dat door de componenten gaat. */
+/** Every mutation on the review, in one object that travels through the components. */
 export interface ReviewApi {
   addComment: (body: CreateCommentBody) => Promise<void>;
   editComment: (id: string, body: string) => Promise<void>;
@@ -9,7 +9,7 @@ export interface ReviewApi {
   reply: (id: string, body: string) => Promise<void>;
   setResolved: (id: string, resolved: boolean) => Promise<void>;
   setCommitMessage: (message: string | null) => Promise<void>;
-  /** Een voorstel overnemen: het wordt jouw comment, en pas dan telt het mee (§9). */
+  /** Accepting a suggestion: it becomes your comment, and only then does it count (§9). */
   acceptSuggestion: (id: string, body?: string) => Promise<void>;
   dismissSuggestion: (id: string) => Promise<void>;
   reopenSuggestion: (id: string) => Promise<void>;
@@ -57,7 +57,7 @@ export function createReviewApi(ctx: Ctx, onReview: (review: Review) => void): R
     reopenSuggestion: (id) => run(`/suggestions/${id}/reopen`, "POST", {}),
     chat: (message) => run("/chat", "POST", { message }),
     restartPass: async () => {
-      // De pass antwoordt meteen en levert zijn bevindingen daarna via SSE.
+      // The pass answers immediately and delivers its findings over SSE afterwards.
       await fetch(`/api/review/${ctx.id}/pass`, {
         method: "POST",
         headers: { authorization: `Bearer ${ctx.token}` },
@@ -66,18 +66,17 @@ export function createReviewApi(ctx: Ctx, onReview: (review: Review) => void): R
   };
 }
 
-/**
- * Luistert op de SSE-stream en geeft elke nieuwe stand door. Zo loopt een tweede
- * tabblad mee, en straks ook de suggesties die tijdens de automatische pass
- * binnendruppelen (§9).
- */
 export interface ReviewEventHandlers {
   onReview: (review: Review) => void;
-  /** Eén stukje van een lopend chatantwoord. */
+  /** One piece of an answer that is still streaming. */
   onChatToken?: (text: string) => void;
   onPass?: (status: PassStatus) => void;
 }
 
+/**
+ * Listens on the SSE stream and passes every new state along. That way a second tab
+ * keeps up, as do the suggestions that trickle in during the automatic pass (§9).
+ */
 export function subscribeToReview(ctx: Ctx, handlers: ReviewEventHandlers): () => void {
   const source = new EventSource(
     `/api/review/${ctx.id}/events?token=${encodeURIComponent(ctx.token)}`,
@@ -88,7 +87,7 @@ export function subscribeToReview(ctx: Ctx, handlers: ReviewEventHandlers): () =
     try {
       event = JSON.parse(e.data) as ReviewEvent;
     } catch {
-      // Een onleesbaar bericht overslaan is beter dan de stream opgeven.
+      // Skipping an unreadable message beats giving up on the stream.
       return;
     }
     if (event.type === "review") handlers.onReview(event.review);

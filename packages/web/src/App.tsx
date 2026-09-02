@@ -14,10 +14,10 @@ const VIEW_KEY = "reviewgate.view";
 const CHAT_KEY = "reviewgate.chat";
 
 const SCOPE_LABEL: Readonly<Record<string, string>> = {
-  staged: "gestaged",
+  staged: "staged",
   working: "working tree",
   amend: "amend",
-  range: "bereik",
+  range: "range",
 };
 
 export function App() {
@@ -52,14 +52,14 @@ export function App() {
     );
   }, [ctx]);
 
-  // Meelopen met mutaties uit een ander tabblad, met de tokens van een lopend
-  // chatantwoord en met de suggesties die tijdens de pass binnendruppelen (§9).
+  // Keep up with mutations from another tab, with the tokens of an answer that is
+  // still streaming, and with the suggestions that trickle in during the pass (§9).
   useEffect(() => {
     if (!ctx) return;
     return subscribeToReview(ctx, {
       onReview: (next) => {
         setReview(next);
-        // Het antwoord staat nu in de review zelf; de losse stream mag weg.
+        // The answer is in the review itself now; the loose stream can go.
         setStreaming(null);
       },
       onChatToken: (text) => setStreaming((prev) => (prev ?? "") + text),
@@ -72,7 +72,7 @@ export function App() {
       window.localStorage.setItem(VIEW_KEY, view);
       window.localStorage.setItem(CHAT_KEY, chatOpen ? "1" : "0");
     } catch {
-      // Privémodus of geblokkeerde opslag: de keuze geldt dan alleen deze sessie.
+      // Private mode or blocked storage: the choice then holds for this session only.
     }
   }, [view, chatOpen]);
 
@@ -86,14 +86,14 @@ export function App() {
   const onDiscuss = useCallback((suggestion: Suggestion) => {
     const where = suggestion.path
       ? `${suggestion.path}${suggestion.startLine ? `:${suggestion.startLine}` : ""}`
-      : "de wijziging als geheel";
-    setChatDraft(`Over dit voorstel bij ${where}: "${suggestion.body}" — klopt dat?`);
+      : "the change as a whole";
+    setChatDraft(`About this suggestion at ${where}: "${suggestion.body}" — does that hold?`);
     setChatOpen(true);
   }, []);
 
   const fileCount = summary?.files.length ?? 0;
 
-  // Toetsenbord: n/p door bestanden, j/k door hunks, u wisselt de weergave (§8).
+  // Keyboard: n/p through files, j/k through hunks, u switches the view (§8).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -123,12 +123,12 @@ export function App() {
   if (!ctx) {
     return (
       <Centered>
-        Geen geldige review-URL. Open ReviewGate via <code className="rg-code">reviewgate open</code>.
+        Not a valid review URL. Open ReviewGate with <code className="rg-code">reviewgate open</code>.
       </Centered>
     );
   }
-  if (error) return <Centered>Kon de review niet laden: {error}</Centered>;
-  if (!summary || !review || !api) return <Centered>laden…</Centered>;
+  if (error) return <Centered>Could not load the review: {error}</Centered>;
+  if (!summary || !review || !api) return <Centered>loading…</Centered>;
 
   const empty = summary.files.length === 0;
   const openCount = review.comments.filter((c) => c.status === "open").length;
@@ -137,7 +137,7 @@ export function App() {
   return (
     <div className="flex h-full flex-col">
       <header className="flex h-10 shrink-0 items-center gap-3 border-b border-[var(--rg-border)] bg-[var(--rg-bg-raised)] px-3">
-        <span className="font-semibold">{summary.repo.branch ?? "(geen branch)"}</span>
+        <span className="font-semibold">{summary.repo.branch ?? "(no branch)"}</span>
         <span className="text-[var(--rg-text-faint)]">·</span>
         <span className="text-[var(--rg-text-muted)]">
           {SCOPE_LABEL[summary.scope] ?? summary.scope}
@@ -145,12 +145,12 @@ export function App() {
         {round > 1 && (
           <>
             <span className="text-[var(--rg-text-faint)]">·</span>
-            <span className="text-[var(--rg-text-muted)]">ronde {round}</span>
+            <span className="text-[var(--rg-text-muted)]">round {round}</span>
           </>
         )}
         <span className="text-[var(--rg-text-faint)]">·</span>
         <span className="text-[var(--rg-text-muted)] tabular-nums">
-          {summary.files.length} {summary.files.length === 1 ? "bestand" : "bestanden"}
+          {summary.files.length} {summary.files.length === 1 ? "file" : "files"}
         </span>
         <span className="tabular-nums">
           <span style={{ color: "var(--rg-status-added)" }}>+{summary.additions}</span>{" "}
@@ -160,7 +160,7 @@ export function App() {
           <>
             <span className="text-[var(--rg-text-faint)]">·</span>
             <span className="tabular-nums" style={{ color: "var(--rg-changes)" }}>
-              {openCount} openstaand
+              {openCount} open
             </span>
           </>
         )}
@@ -172,12 +172,12 @@ export function App() {
             aria-pressed={chatOpen}
             className="rounded border border-[var(--rg-border)] px-2 py-0.5 text-[var(--rg-text-muted)]"
           >
-            Gesprek
+            Conversation
           </button>
           <div
             className="flex overflow-hidden rounded border border-[var(--rg-border)]"
             role="group"
-            aria-label="Weergave"
+            aria-label="View"
           >
             {(["unified", "split"] as const).map((v) => (
               <button
@@ -206,7 +206,7 @@ export function App() {
 
         <main className="min-w-0 flex-1 overflow-y-auto">
           {empty ? (
-            <Centered>Geen wijzigingen in deze scope.</Centered>
+            <Centered>No changes in this scope.</Centered>
           ) : (
             summary.files.map((f) => (
               <FilePanel
@@ -243,7 +243,7 @@ export function App() {
   );
 }
 
-/** Springt naar de volgende of vorige hunk-kop in het document. */
+/** Jumps to the next or previous hunk header in the document. */
 function moveHunk(delta: 1 | -1): void {
   const headers = Array.from(document.querySelectorAll<HTMLElement>("[data-hunk]"));
   if (headers.length === 0) return;

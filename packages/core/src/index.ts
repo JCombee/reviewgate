@@ -49,7 +49,7 @@ export type {
   SuggestionStatus,
 } from "./review/types.js";
 
-/** Testhulp: een wegwerp-git-repo. Wordt door de server-integratietests gebruikt. */
+/** Test helper: a throwaway git repo. Used by the server integration tests. */
 export { TestRepo } from "./git/testRepo.js";
 
 export { analyzeCommand, rewriteWithMessageFile, splitCommand } from "./hook/command.js";

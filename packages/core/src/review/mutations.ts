@@ -8,9 +8,9 @@ import type {
 } from "./types.js";
 
 /**
- * Mutaties op een review, als pure functies: ze geven een nieuwe review terug en
- * raken de schijf niet aan. Zo is de regel "approve kan niet met openstaande
- * comments" op één plek te testen, los van HTTP en van de store (§8).
+ * Mutations on a review, as pure functions: they return a new review and never touch
+ * the disk. That way the rule "approve is impossible with open comments" lives in one
+ * place and is tested there, apart from HTTP and from the store (§8).
  */
 
 export class ReviewError extends Error {
@@ -38,15 +38,15 @@ export interface NewCommentInput {
 
 export function addComment(review: Review, input: NewCommentInput): { review: Review; comment: Comment } {
   const body = input.body.trim();
-  if (body === "") throw new ReviewError("een comment zonder tekst zegt niets", 400);
+  if (body === "") throw new ReviewError("a comment without text says nothing", 400);
 
   if (input.scope === "line") {
-    if (!input.path) throw new ReviewError("een regel-comment heeft een pad nodig", 400);
+    if (!input.path) throw new ReviewError("a line comment needs a path", 400);
     if (input.side !== "old" && input.side !== "new") {
-      throw new ReviewError("een regel-comment heeft een kant nodig", 400);
+      throw new ReviewError("a line comment needs a side", 400);
     }
     if (!Number.isInteger(input.startLine) || (input.startLine as number) < 1) {
-      throw new ReviewError("ongeldige startregel", 400);
+      throw new ReviewError("invalid start line", 400);
     }
   }
 
@@ -57,7 +57,7 @@ export function addComment(review: Review, input: NewCommentInput): { review: Re
     endLine !== undefined &&
     endLine < startLine
   ) {
-    throw new ReviewError("het einde van de range ligt vóór het begin", 400);
+    throw new ReviewError("the end of the range comes before its start", 400);
   }
 
   const round = review.rounds[review.rounds.length - 1];
@@ -89,19 +89,19 @@ function replaceComment(review: Review, id: string, fn: (c: Comment) => Comment)
     found = true;
     return fn(c);
   });
-  if (!found) throw new ReviewError("onbekende comment", 404);
+  if (!found) throw new ReviewError("unknown comment", 404);
   return { ...review, comments };
 }
 
 export function editComment(review: Review, id: string, body: string): Review {
   const trimmed = body.trim();
-  if (trimmed === "") throw new ReviewError("een comment zonder tekst zegt niets", 400);
+  if (trimmed === "") throw new ReviewError("a comment without text says nothing", 400);
   return replaceComment(review, id, (c) => ({ ...c, body: trimmed }));
 }
 
 export function deleteComment(review: Review, id: string): Review {
   const comments = review.comments.filter((c) => c.id !== id);
-  if (comments.length === review.comments.length) throw new ReviewError("onbekende comment", 404);
+  if (comments.length === review.comments.length) throw new ReviewError("unknown comment", 404);
   return { ...review, comments };
 }
 
@@ -112,7 +112,7 @@ export function addReply(
   author: Comment["author"] = "user",
 ): Review {
   const trimmed = body.trim();
-  if (trimmed === "") throw new ReviewError("een reactie zonder tekst zegt niets", 400);
+  if (trimmed === "") throw new ReviewError("a reply without text says nothing", 400);
   return replaceComment(review, id, (c) => ({
     ...c,
     replies: [...c.replies, { author, body: trimmed, at: new Date().toISOString() }],
@@ -120,8 +120,8 @@ export function addReply(
 }
 
 /**
- * Resolven en heropenen. Een `outdated` comment kun je niet resolven: die hoort in
- * de outdated-sectie en telt toch al niet mee (§5).
+ * Resolving and reopening. An `outdated` comment cannot be resolved: it belongs in
+ * the outdated section and already does not count towards anything (§5).
  */
 export function setCommentStatus(review: Review, id: string, resolved: boolean): Review {
   return replaceComment(review, id, (c) => {
@@ -133,11 +133,11 @@ export function setCommentStatus(review: Review, id: string, resolved: boolean):
 export function setEditedCommitMessage(review: Review, message: string | null): Review {
   const rounds = [...review.rounds];
   const last = rounds[rounds.length - 1];
-  if (!last) throw new ReviewError("deze review heeft nog geen ronde", 409);
+  if (!last) throw new ReviewError("this review has no round yet", 409);
   const trimmed = message === null ? null : message.trim();
   rounds[rounds.length - 1] = {
     ...last,
-    // Precies de oorspronkelijke message terugtypen is geen wijziging.
+    // Typing the original message back verbatim is not a change.
     editedCommitMessage: trimmed === "" || trimmed === last.commitMessage ? null : trimmed,
   };
   return { ...review, rounds };

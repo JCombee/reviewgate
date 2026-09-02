@@ -15,9 +15,9 @@ const MIME: Readonly<Record<string, string>> = {
 };
 
 /**
- * Zoekt de gebouwde web-assets. In de monorepo staan die naast dit package; in een
- * gepubliceerde install liggen ze in de package zelf. `REVIEWGATE_WEB_DIST`
- * overschrijft beide, wat handig is tijdens ontwikkeling.
+ * Finds the built web assets. In the monorepo they sit next to this package; in a
+ * published install they live inside the package itself. `REVIEWGATE_WEB_DIST`
+ * overrides both, which is handy during development.
  */
 export async function findWebDist(): Promise<string | null> {
   const fromEnv = process.env["REVIEWGATE_WEB_DIST"];
@@ -34,14 +34,14 @@ export async function findWebDist(): Promise<string | null> {
 }
 
 export interface Asset {
-  /** Losse kopie op een gewone ArrayBuffer, zodat Hono's body() hem accepteert. */
+  /** A separate copy on an ordinary ArrayBuffer, so Hono's body() accepts it. */
   body: Uint8Array<ArrayBuffer>;
   contentType: string;
 }
 
 /**
- * Leest een asset, maar nooit buiten de dist-directory: het pad uit de request
- * wordt opgelost en daarna gecontroleerd, zodat `../` niets kan bereiken.
+ * Reads an asset, but never outside the dist directory: the path from the request is
+ * resolved and then checked, so `../` can reach nothing.
  */
 export async function readAsset(dist: string, urlPath: string): Promise<Asset | null> {
   const rel = decodeURIComponent(urlPath).replace(/^\/+/, "");

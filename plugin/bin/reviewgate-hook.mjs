@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Dunne wrapper om `reviewgate hook`.
+ * A thin wrapper around `reviewgate hook`.
  *
- * Node-script, geen shellscript, en expliciet met `node` gestart in hooks.json:
- * zo hangt de gate niet af van een POSIX-shell of van het exec-bit, en werkt hij
- * op macOS, Linux en Windows gelijk (§4, §15.9).
+ * A Node script rather than a shell script, started explicitly with `node` in
+ * hooks.json: that way the gate does not depend on a POSIX shell or on the exec bit,
+ * and it behaves the same on macOS, Linux and Windows (§4, §15.9).
  *
- * Bij élke fout eindigen we stil met exit 0. Een kapotte gate mag nooit het werk
- * blokkeren, alleen niet reviewen (§11).
+ * On *any* failure we exit quietly with status 0. A broken gate must never block the
+ * work, only fail to review it (§11).
  */
 import { spawn } from "node:child_process";
 import { createWriteStream, existsSync } from "node:fs";
@@ -18,19 +18,20 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 
 /**
- * De CLI-entry direct met `node` starten, niet de bin-shim: die heet op Windows
- * `reviewgate.cmd` en dan zou het commando per platform verschillen (§11).
+ * Start the CLI entry with `node` directly rather than the bin shim: on Windows that
+ * shim is called `reviewgate.cmd`, which would make the command platform-specific
+ * (§11).
  */
 function findCli() {
   const fromEnv = process.env.REVIEWGATE_CLI;
   if (fromEnv && existsSync(fromEnv)) return fromEnv;
 
   const candidates = [
-    // Naast de plugin, in een monorepo-checkout.
+    // Next to the plugin, in a monorepo checkout.
     resolve(here, "../../packages/cli/bin/reviewgate.mjs"),
-    // Meegeleverd in de plugin zelf.
+    // Shipped inside the plugin itself.
     resolve(here, "../node_modules/@reviewgate/cli/bin/reviewgate.mjs"),
-    // Geïnstalleerd in het project.
+    // Installed in the project.
     resolve(process.cwd(), "node_modules/@reviewgate/cli/bin/reviewgate.mjs"),
   ];
   return candidates.find((p) => existsSync(p)) ?? null;
@@ -43,13 +44,13 @@ function logFailure(message) {
     const stream = createWriteStream(join(dir, "hook.log"), { flags: "a" });
     stream.end(`${new Date().toISOString()} wrapper: ${message}\n`);
   } catch {
-    // Stil falen is hier het enige goede antwoord.
+    // Failing silently is the only right answer here.
   }
 }
 
 const cli = findCli();
 if (!cli) {
-  logFailure("reviewgate CLI niet gevonden; commit ongehinderd doorgelaten");
+  logFailure("reviewgate CLI not found; commit let through untouched");
   process.exit(0);
 }
 
@@ -70,6 +71,6 @@ child.on("error", (err) => {
 
 child.on("close", (code) => {
   if (code !== 0) logFailure(`exit ${code}: ${stderr.trim()}`);
-  // Ook bij een niet-nul exit laten we de commit door.
+  // Even on a non-zero exit we let the commit through.
   process.exit(0);
 });

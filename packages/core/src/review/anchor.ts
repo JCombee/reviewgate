@@ -1,18 +1,18 @@
 import type { Comment, Side } from "./types.js";
 
 /**
- * Comments meenemen naar een volgende ronde (§5).
+ * Carrying comments into a next round (§5).
  *
- * Bij een nieuwe ronde verschuiven regelnummers. Per openstaande comment:
+ * Line numbers shift between rounds. For each open comment:
  *
- * 1. Zoek `anchorSnippet` terug binnen ±40 regels rond het oude nummer. Exacte
- *    match → verplaats de comment.
- * 2. Precies één match elders in het bestand → verplaats en markeer als verplaatst.
- * 3. Geen of meerdere matches → `outdated`. Blijft zichtbaar in de UI, telt niet
- *    meer mee als openstaand.
+ * 1. Look the `anchorSnippet` back up within ±40 lines of the old number. An exact
+ *    match moves the comment.
+ * 2. Exactly one match elsewhere in the file → move it and mark it as moved.
+ * 3. No match or several → `outdated`. It stays visible in the UI and no longer
+ *    counts as open.
  */
 
-/** Hoe ver we rond het oude regelnummer zoeken voordat we het hele bestand afgaan. */
+/** How far around the old line number we look before scanning the whole file. */
 export const ANCHOR_WINDOW = 40;
 
 export type AnchorOutcome = "unchanged" | "shifted" | "moved" | "outdated" | "skipped";
@@ -20,11 +20,11 @@ export type AnchorOutcome = "unchanged" | "shifted" | "moved" | "outdated" | "sk
 export interface AnchorResult {
   comment: Comment;
   outcome: AnchorOutcome;
-  /** Regelnummer waar de comment stond, als hij verplaatst is. */
+  /** The line the comment used to sit on, if it moved. */
   from?: number;
 }
 
-/** De inhoud van de bestanden in de nieuwe ronde, per pad, per kant. */
+/** The file contents for the new round, per path, per side. */
 export interface FileLines {
   get(path: string, side: Side): readonly string[] | null;
 }
@@ -45,8 +45,8 @@ export function reanchorComments(
 }
 
 export function reanchorComment(comment: Comment, files: FileLines): AnchorResult {
-  // Alleen openstaande regel-comments verhuizen mee. Opgeloste en globale comments
-  // hebben geen anker, en verouderde blijven verouderd.
+  // Only open line comments move along. Resolved and global comments have no anchor,
+  // and outdated ones stay outdated.
   if (comment.scope !== "line" || comment.status !== "open") {
     return { comment, outcome: "skipped" };
   }
@@ -54,7 +54,7 @@ export function reanchorComment(comment: Comment, files: FileLines): AnchorResul
     return { comment, outcome: "skipped" };
   }
   if (!comment.anchorSnippet) {
-    // Zonder anker kunnen we niets terugvinden; dan is verouderd het eerlijke antwoord.
+    // Without an anchor we can find nothing back, so outdated is the honest answer.
     return { comment: { ...comment, status: "outdated" }, outcome: "outdated" };
   }
 
@@ -74,7 +74,7 @@ export function reanchorComment(comment: Comment, files: FileLines): AnchorResul
   const old = comment.startLine;
   const span = (comment.endLine ?? old) - old;
 
-  // 1. Binnen het venster: de dichtstbijzijnde match is de juiste.
+  // 1. Inside the window: the nearest match is the right one.
   const nearby = matches.filter((line) => Math.abs(line - old) <= ANCHOR_WINDOW);
   if (nearby.length > 0) {
     const best = nearby.reduce((a, b) => (Math.abs(a - old) <= Math.abs(b - old) ? a : b));
@@ -82,13 +82,13 @@ export function reanchorComment(comment: Comment, files: FileLines): AnchorResul
     return { comment: move(comment, best, span), outcome: "shifted", from: old };
   }
 
-  // 2. Precies één match elders in het bestand.
+  // 2. Exactly one match elsewhere in the file.
   if (matches.length === 1) {
     const only = matches[0] as number;
     return { comment: move(comment, only, span), outcome: "moved", from: old };
   }
 
-  // 3. Meerdere matches, allemaal ver weg: niet te bepalen welke bedoeld is.
+  // 3. Several matches, all far away: no way to tell which one was meant.
   return { comment: { ...comment, status: "outdated" }, outcome: "outdated" };
 }
 

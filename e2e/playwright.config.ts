@@ -2,8 +2,8 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: ".",
-  // Elke test zet zijn eigen repo en server op; parallel draaien levert alleen
-  // poort- en procesgedoe op.
+  // Every test sets up its own repo and server; running them in parallel only buys
+  // port and process trouble.
   workers: 1,
   fullyParallel: false,
   timeout: 120_000,

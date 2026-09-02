@@ -4,16 +4,16 @@ import path from "node:path";
 import { runGit } from "./exec.js";
 
 /**
- * Wegwerp-git-repo voor integratietests. Alle config staat lokaal in de repo, zodat
- * de tests niet afhangen van de globale gitconfig van de machine waarop ze draaien.
+ * A throwaway git repo for integration tests. All config lives locally in the repo,
+ * so the tests do not depend on the global gitconfig of the machine they run on.
  */
 export class TestRepo {
   private constructor(readonly root: string) {}
 
   static async create(prefix = "reviewgate-test-"): Promise<TestRepo> {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
-    // macOS levert /var, dat een symlink naar /private/var is; git rapporteert het
-    // opgeloste pad. Los het hier op zodat padvergelijkingen kloppen.
+    // macOS hands out /var, which is a symlink to /private/var; git reports the
+    // resolved path. Resolve it here so path comparisons hold.
     const root = await fs.realpath(dir);
 
     await runGit(["init", "--initial-branch=main", "."], { cwd: root });
@@ -68,7 +68,7 @@ export class TestRepo {
   }
 
   async cleanup(): Promise<void> {
-    // Windows houdt packfiles soms nog even vast; maxRetries vangt dat af.
+    // Windows sometimes holds on to packfiles for a moment; maxRetries covers that.
     await fs.rm(this.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 }

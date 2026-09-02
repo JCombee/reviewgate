@@ -5,7 +5,7 @@ import { parseUnifiedDiff } from "./parse.js";
 const slice = (s: string, seg: { start: number; end: number }) => s.slice(seg.start, seg.end);
 
 describe("segmentsFor", () => {
-  it("markeert alleen het gewijzigde woord", () => {
+  it("marks only the changed word", () => {
     const before = "export const b = 2;";
     const after = "export const b = 22;";
     const res = segmentsFor(before, after);
@@ -14,7 +14,7 @@ describe("segmentsFor", () => {
     expect(res?.addSegments.map((s) => slice(after, s))).toEqual(["22"]);
   });
 
-  it("markeert een toevoeging aan het eind zonder de rest aan te raken", () => {
+  it("marks an addition at the end without touching the rest", () => {
     const before = "foo(a)";
     const after = "foo(a, b)";
     const res = segmentsFor(before, after);
@@ -22,7 +22,7 @@ describe("segmentsFor", () => {
     expect(res?.addSegments.map((s) => slice(after, s))).toEqual([", b"]);
   });
 
-  it("markeert een verwijdering in het midden", () => {
+  it("marks a removal in the middle", () => {
     const before = "if (a && b && c) {";
     const after = "if (a && c) {";
     const res = segmentsFor(before, after);
@@ -30,24 +30,24 @@ describe("segmentsFor", () => {
     expect(res?.addSegments).toEqual([]);
   });
 
-  it("houdt gemeenschappelijke inspringing buiten de highlight", () => {
-    const before = "    return oud;";
-    const after = "    return nieuw;";
+  it("keeps shared indentation out of the highlight", () => {
+    const before = "    return before;";
+    const after = "    return after;";
     const res = segmentsFor(before, after);
-    expect(res?.delSegments.map((s) => slice(before, s))).toEqual(["oud"]);
-    expect(res?.addSegments.map((s) => slice(after, s))).toEqual(["nieuw"]);
+    expect(res?.delSegments.map((s) => slice(before, s))).toEqual(["before"]);
+    expect(res?.addSegments.map((s) => slice(after, s))).toEqual(["after"]);
   });
 
-  it("geeft null bij identieke regels", () => {
-    expect(segmentsFor("gelijk", "gelijk")).toBeNull();
+  it("returns null for identical lines", () => {
+    expect(segmentsFor("same", "same")).toBeNull();
   });
 
-  it("geeft null als de regel volledig vervangen is", () => {
-    // Alles highlighten is hetzelfde als niets highlighten, maar dan met ruis.
-    expect(segmentsFor("const a = 1;", "throw new Error('boem');")).toBeNull();
+  it("returns null when the line is replaced wholesale", () => {
+    // Highlighting everything is the same as highlighting nothing, only noisier.
+    expect(segmentsFor("const a = 1;", "throw new Error('boom');")).toBeNull();
   });
 
-  it("geeft null bij extreem lange regels", () => {
+  it("returns null for extremely long lines", () => {
     const long = "x".repeat(3000);
     expect(segmentsFor(long, `${long}y`)).toBeNull();
   });
@@ -56,11 +56,11 @@ describe("segmentsFor", () => {
 describe("intralineDiff", () => {
   const hunkOf = (patch: string) => {
     const hunk = parseUnifiedDiff(patch)[0]?.hunks[0];
-    if (!hunk) throw new Error("geen hunk in fixture");
+    if (!hunk) throw new Error("no hunk in fixture");
     return hunk;
   };
 
-  it("koppelt een min-blok aan het bijbehorende plus-blok", () => {
+  it("pairs a minus block with the matching plus block", () => {
     const hunk = hunkOf(
       [
         "diff --git a/a.ts b/a.ts",
@@ -87,7 +87,7 @@ describe("intralineDiff", () => {
     expect(pairs[0]?.addSegments.map((s) => slice(add, s))).toEqual(["11"]);
   });
 
-  it("koppelt niets bij blokken van ongelijke lengte", () => {
+  it("pairs nothing when the blocks have different lengths", () => {
     const hunk = hunkOf(
       [
         "diff --git a/a.ts b/a.ts",
@@ -95,16 +95,16 @@ describe("intralineDiff", () => {
         "+++ b/a.ts",
         "@@ -1,2 +1,3 @@",
         " context",
-        "-oud",
-        "+nieuw een",
-        "+nieuw twee",
+        "-before",
+        "+after one",
+        "+after two",
         "",
       ].join("\n"),
     );
     expect(intralineDiff(hunk)).toEqual([]);
   });
 
-  it("koppelt niets in een hunk met alleen toevoegingen", () => {
+  it("pairs nothing in a hunk with only additions", () => {
     const hunk = hunkOf(
       [
         "diff --git a/a.ts b/a.ts",
@@ -112,7 +112,7 @@ describe("intralineDiff", () => {
         "+++ b/a.ts",
         "@@ -1,1 +1,2 @@",
         " context",
-        "+erbij",
+        "+added",
         "",
       ].join("\n"),
     );

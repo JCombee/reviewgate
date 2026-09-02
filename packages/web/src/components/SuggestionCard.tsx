@@ -5,22 +5,22 @@ import { CommentForm } from "./CommentForm.jsx";
 
 const SEVERITY_LABEL: Readonly<Record<Severity, string>> = {
   blocker: "blocker",
-  aandachtspunt: "aandachtspunt",
+  consideration: "consideration",
   nit: "nit",
 };
 
 const SEVERITY_COLOR: Readonly<Record<Severity, string>> = {
   blocker: "var(--rg-status-deleted)",
-  aandachtspunt: "var(--rg-status-modified)",
+  consideration: "var(--rg-status-modified)",
   nit: "var(--rg-text-faint)",
 };
 
 /**
- * Een voorstel van de automatische pass (§9).
+ * A suggestion from the automatic pass (§9).
  *
- * Visueel bewust anders dan een comment: gestippelde rand, badge "Voorstel", gedempte
- * kleur. Zolang je niets doet blijft het een voorstel en verandert er niets aan de
- * review — het telt niet mee voor de knop en gaat niet naar Claude.
+ * Deliberately different from a comment: a dashed border, a "Suggestion" badge, muted
+ * colour. As long as you do nothing it stays a suggestion and nothing about the review
+ * changes — it does not count towards the button and it does not go to Claude.
  */
 export function SuggestionCard({
   suggestion,
@@ -54,11 +54,11 @@ export function SuggestionCard({
       data-suggestion-id={suggestion.id}
     >
       <div className="flex items-center gap-2 text-[var(--rg-text-faint)]">
-        <span className="rounded border border-[var(--rg-border)] px-1">Voorstel</span>
+        <span className="rounded border border-[var(--rg-border)] px-1">Suggestion</span>
         <span style={{ color: SEVERITY_COLOR[suggestion.severity] }}>
           {SEVERITY_LABEL[suggestion.severity]}
         </span>
-        <span>· ronde {suggestion.round}</span>
+        <span>· round {suggestion.round}</span>
         {suggestion.startLine !== undefined && (
           <span className="rg-code">
             {suggestion.endLine && suggestion.endLine !== suggestion.startLine
@@ -72,7 +72,7 @@ export function SuggestionCard({
 
       {auto && (
         <p className="mt-1 text-[var(--rg-text-faint)]">
-          Automatisch afgewezen — je hebt dit eerder al afgewezen.
+          Dismissed automatically — you already dismissed this earlier.
         </p>
       )}
 
@@ -80,7 +80,7 @@ export function SuggestionCard({
         <div className="mt-2">
           <CommentForm
             initialBody={suggestion.body}
-            submitLabel="Neem over"
+            submitLabel="Accept"
             onSubmit={async (body) => {
               await api.acceptSuggestion(suggestion.id, body);
               setAccepting(false);
@@ -93,17 +93,17 @@ export function SuggestionCard({
           {suggestion.status === "pending" && (
             <>
               <button type="button" onClick={() => setAccepting(true)}>
-                Overnemen
+                Accept
               </button>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => void act(() => api.dismissSuggestion(suggestion.id))}
               >
-                Afwijzen
+                Dismiss
               </button>
               <button type="button" onClick={() => onDiscuss(suggestion)}>
-                Bespreken
+                Discuss
               </button>
             </>
           )}
@@ -113,11 +113,11 @@ export function SuggestionCard({
               disabled={busy}
               onClick={() => void act(() => api.reopenSuggestion(suggestion.id))}
             >
-              Heropen
+              Reopen
             </button>
           )}
           {suggestion.status === "accepted" && (
-            <span className="text-[var(--rg-text-faint)]">Overgenomen als comment.</span>
+            <span className="text-[var(--rg-text-faint)]">Accepted as a comment.</span>
           )}
         </div>
       )}
@@ -125,7 +125,7 @@ export function SuggestionCard({
   );
 }
 
-/** De ingeklapte sectie met wat je hebt afgewezen; die blijft altijd zichtbaar (§9). */
+/** The collapsed section with what you dismissed; it always stays visible (§9). */
 export function DismissedSuggestions({
   suggestions,
   api,
@@ -146,7 +146,7 @@ export function DismissedSuggestions({
         className="text-[var(--rg-text-faint)]"
         aria-expanded={open}
       >
-        {open ? "▾" : "▸"} Afgewezen ({suggestions.length})
+        {open ? "▾" : "▸"} Dismissed ({suggestions.length})
       </button>
       {open &&
         suggestions.map((s) => (

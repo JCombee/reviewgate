@@ -1,16 +1,16 @@
 @import "tailwindcss";
 
 /*
-  Design tokens, in één keer vastgelegd (§8).
+  Design tokens, settled in one go (§8).
 
-  Richting: een leesomgeving voor code die opent vanuit een terminal. Rustig, dicht,
-  alle ruimte naar de diff, chrome zo dun mogelijk. Geen webfonts — de UI draait op
-  localhost en moet direct staan, dus systeemfamilies: één sans voor de chrome, één
-  monospace voor de code.
+  Direction: a reading environment for code that opens out of a terminal. Calm, dense,
+  all the room to the diff, the chrome as thin as possible. No web fonts — the UI runs
+  on localhost and has to be there instantly, so system families: one sans for the
+  chrome, one monospace for the code.
 
-  Kleur: de diffvlakken zijn laag verzadigd zodat lange sessies niet vermoeien; alleen
-  de per-teken highlight binnen een gewijzigde regel is hoog verzadigd. De enige echt
-  uitgesproken plek is de actiebalk onderaan (die komt in M3).
+  Colour: the diff surfaces are low-saturation so long sessions do not tire you out;
+  only the per-character highlight inside a changed line is high-saturation. The one
+  genuinely outspoken place is the action bar at the bottom.
 */
 
 :root {
@@ -26,7 +26,7 @@
   --rg-size-code: 12.5px;
   --rg-line-code: 1.55;
 
-  /* Vlakken en tekst — warm neutraal, niet het blauwgrijs van elke SaaS-app. */
+  /* Surfaces and text — warm neutral, not the blue-grey of every SaaS app. */
   --rg-bg: #fbfbf9;
   --rg-bg-raised: #ffffff;
   --rg-bg-sunken: #f2f2ee;
@@ -37,13 +37,13 @@
   --rg-text-faint: #97978c;
   --rg-focus: #3b6ea5;
 
-  /* Diffvlakken: laag verzadigd. */
+  /* Diff surfaces: low saturation. */
   --rg-add-bg: #eaf4ec;
   --rg-add-gutter: #dceee1;
   --rg-del-bg: #fbecec;
   --rg-del-gutter: #f5dcdc;
 
-  /* Per-teken highlight: hoog verzadigd, alleen hier. */
+  /* Per-character highlight: high saturation, only here. */
   --rg-add-word: #a6dfb8;
   --rg-del-word: #f2b3b3;
 
@@ -52,7 +52,7 @@
   --rg-status-renamed: #7a5cc0;
   --rg-status-modified: #8a6a1f;
 
-  /* Voor M3: de actiebalk. Nu al vastgelegd zodat de wissel later niet ad hoc is. */
+  /* The action bar. Settled up front so the switch is never an ad-hoc choice. */
   --rg-approve: #2f7d4f;
   --rg-changes: #b4610f;
 }
@@ -131,7 +131,7 @@ body {
   outline-offset: 1px;
 }
 
-/* Motion alleen waar iets verandert, en nooit tegen de voorkeur van de gebruiker in. */
+/* Motion only where something changes, and never against the user's preference. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -210,7 +210,7 @@ body {
   border-bottom: 1px solid var(--rg-border);
 }
 
-/* Shiki-tokens: één kleur per thema, gekozen via een variabele. */
+/* Shiki tokens: one colour per theme, picked through a variable. */
 .rg-tok {
   color: var(--rg-tok-l);
 }
@@ -225,14 +225,14 @@ body {
   color: var(--rg-tok-d);
 }
 
-/* --- comments in de diff -------------------------------------------------- */
+/* --- comments in the diff ------------------------------------------------- */
 
 .rg-gutter-clickable {
   position: relative;
   cursor: pointer;
 }
 
-/* Het plusje verschijnt pas bij hover: de goot is eerst een regelnummer. */
+/* The plus only appears on hover: the gutter is a line number first. */
 .rg-plus {
   position: absolute;
   left: 0.25rem;
@@ -258,9 +258,8 @@ body {
 }
 
 /*
-  De rijen gebruiken `display: contents`, dus er is geen wrapper waar een
-  kindselector op kan aangrijpen: de goot krijgt zijn eigen, iets donkerdere tint
-  rechtstreeks.
+  The rows use `display: contents`, so there is no wrapper for a child selector to
+  grab hold of: the gutter gets its own, slightly darker tint directly.
 */
 .rg-gutter.rg-line-add {
   background: var(--rg-add-gutter);
@@ -270,8 +269,8 @@ body {
 }
 
 /*
-  De primaire knop is de enige uitgesproken plek in het scherm. De wissel tussen
-  Approve en Request changes is alleen kleur en label — geen layout shift.
+  The primary button is the one outspoken place on the screen. The switch between
+  Approve and Request changes is colour and label only — no layout shift.
 */
 .rg-primary {
   transition:

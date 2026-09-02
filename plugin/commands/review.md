@@ -1,9 +1,9 @@
 ---
-description: Open ReviewGate op de huidige wijzigingen zonder te committen.
+description: Open ReviewGate on the current changes without committing.
 ---
 
-Start een handmatige review van de wijzigingen in deze repo.
+Start a manual review of the changes in this repo.
 
-Draai `reviewgate open --staged` (of `--working` als er nog niets gestaged is) en
-geef de gebruiker de URL die het commando print. Wacht daarna op wat de gebruiker
-in de review besluit; ga niet zelf committen.
+Run `reviewgate open --staged` (or `--working` when nothing is staged yet) and give the
+user the URL the command prints. Then wait for what the user decides in the review; do
+not go and commit yourself.

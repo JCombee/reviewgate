@@ -21,14 +21,14 @@ export interface RunningServer {
 
 export interface StartOptions {
   cwd: string;
-  /** 0 = ephemeral poort, wat de default is (§3). */
+  /** 0 = an ephemeral port, which is the default (§3). */
   port?: number;
 }
 
 /**
- * Start de review-server op 127.0.0.1 en legt poort, pid en beheerstoken vast in
- * `.git/reviewgate/server.json`, zodat een tweede aanroep in dezelfde repo de
- * draaiende server hergebruikt in plaats van een tweede te starten (§3).
+ * Starts the review server on 127.0.0.1 and records port, pid and admin token in
+ * `.git/reviewgate/server.json`, so a second invocation in the same repo reuses the
+ * running server instead of starting a second one (§3).
  */
 export async function startServer(opts: StartOptions): Promise<RunningServer> {
   const git = await NodeGitClient.open(opts.cwd);
@@ -61,9 +61,9 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     if (closed) return;
     closed = true;
 
-    // Een open SSE-stream eindigt uit zichzelf nooit, en `close()` wacht op elke
-    // verbinding. Zonder dit blijft de hook hangen zodra er een browser meekijkt:
-    // het oordeel staat dan al op stdout, maar het proces eindigt niet.
+    // An open SSE stream never ends by itself, and `close()` waits for every
+    // connection. Without this the hook hangs as soon as a browser is watching: the
+    // verdict is already on stdout, but the process does not end.
     const node = server as unknown as {
       closeIdleConnections?: () => void;
       closeAllConnections?: () => void;
@@ -73,8 +73,8 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
 
     await Promise.race([
       new Promise<void>((resolve) => server.close(() => resolve())),
-      // Laatste redmiddel: liever een socket die nog even naijlt dan een hook die
-      // blijft staan.
+      // Last resort: better a socket that lingers a moment than a hook that never
+      // finishes.
       new Promise<void>((resolve) => setTimeout(resolve, 2000).unref()),
     ]);
 
@@ -86,8 +86,8 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
 }
 
 /**
- * Geeft de draaiende server voor deze repo terug, of null. Een record van een
- * proces dat niet meer bestaat of niet meer antwoordt wordt opgeruimd.
+ * Returns the running server for this repo, or null. A record for a process that no
+ * longer exists or no longer answers gets cleaned up.
  */
 export async function findRunningServer(gitDir: string): Promise<ServerRecord | null> {
   const rec = await readServerRecord(gitDir);
@@ -100,7 +100,7 @@ export async function findRunningServer(gitDir: string): Promise<ServerRecord | 
     const res = await fetch(`http://127.0.0.1:${rec.port}/healthz`, {
       signal: AbortSignal.timeout(1500),
     });
-    if (!res.ok) throw new Error(`healthz gaf ${res.status}`);
+    if (!res.ok) throw new Error(`healthz returned ${res.status}`);
     return rec;
   } catch {
     await removeServerRecord(gitDir);
@@ -112,11 +112,11 @@ export interface CreatedSession {
   id: string;
   token: string;
   url: string;
-  /** Id van de persistente review; de hook wacht hierop (§7). */
+  /** Id of the persistent review; this is what the hook waits on (§7). */
   reviewId: string;
 }
 
-/** Maakt een sessie aan op een draaiende server en geeft de review-URL terug. */
+/** Creates a session on a running server and returns the review URL. */
 export async function createSession(
   rec: ServerRecord,
   body: CreateSessionBody,
@@ -130,7 +130,7 @@ export async function createSession(
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new Error(`kon geen review-sessie aanmaken: ${res.status} ${await res.text()}`);
+    throw new Error(`could not create a review session: ${res.status} ${await res.text()}`);
   }
   const data = (await res.json()) as {
     id: string;

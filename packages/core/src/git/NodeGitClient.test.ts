@@ -3,7 +3,7 @@ import type { DiffFile } from "../types.js";
 import { NodeGitClient } from "./NodeGitClient.js";
 import { TestRepo } from "./testRepo.js";
 
-/** Een klein maar echt PNG-bestand, zodat git het als binair ziet. */
+/** A tiny but genuine PNG file, so git sees it as binary. */
 const PNG = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
   0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
@@ -14,30 +14,30 @@ const PNG = new Uint8Array([
 const byPath = (files: readonly DiffFile[], p: string): DiffFile | undefined =>
   files.find((f) => f.path === p);
 
-describe("NodeGitClient — gestagede scope met alle bestandssoorten", () => {
+describe("NodeGitClient — staged scope with every kind of file", () => {
   let repo: TestRepo;
   let git: NodeGitClient;
 
   beforeAll(async () => {
     repo = await TestRepo.create();
 
-    // Ronde 0: de basis waartegen gediffd wordt.
-    await repo.write("src/behouden.ts", "export const a = 1;\nexport const b = 2;\n");
-    await repo.write("src/hernoem-mij.ts", ["één", "twee", "drie", "vier", "vijf"].join("\n") + "\n");
-    await repo.write("src/weg.ts", "verdwijnt\n");
-    await repo.write("map met spatie/café.ts", "oud\n");
+    // Round 0: the base we diff against.
+    await repo.write("src/kept.ts", "export const a = 1;\nexport const b = 2;\n");
+    await repo.write("src/rename-me.ts", ["one", "two", "three", "four", "five"].join("\n") + "\n");
+    await repo.write("src/gone.ts", "disappears\n");
+    await repo.write("dir with space/café.ts", "before\n");
     await repo.addAll();
-    await repo.commit("basis");
+    await repo.commit("base");
 
-    // Ronde 1: toevoeging, verwijdering, wijziging, rename, binair, untracked.
-    await repo.write("src/behouden.ts", "export const a = 1;\nexport const b = 22;\nexport const c = 3;\n");
-    await repo.write("src/nieuw.ts", "export const nieuw = true;\n");
-    await repo.remove("src/weg.ts");
-    await repo.rename("src/hernoem-mij.ts", "src/hernoemd.ts");
-    await repo.write("map met spatie/café.ts", "nieuw\n");
+    // Round 1: addition, deletion, modification, rename, binary, untracked.
+    await repo.write("src/kept.ts", "export const a = 1;\nexport const b = 22;\nexport const c = 3;\n");
+    await repo.write("src/added.ts", "export const added = true;\n");
+    await repo.remove("src/gone.ts");
+    await repo.rename("src/rename-me.ts", "src/renamed.ts");
+    await repo.write("dir with space/café.ts", "after\n");
     await repo.writeBinary("assets/logo.png", PNG);
     await repo.addAll();
-    await repo.write("untracked.txt", "nog niet gestaged\n");
+    await repo.write("untracked.txt", "not staged yet\n");
 
     git = await NodeGitClient.open(repo.root);
   });
@@ -46,7 +46,7 @@ describe("NodeGitClient — gestagede scope met alle bestandssoorten", () => {
     await repo.cleanup();
   });
 
-  it("rapporteert de repo correct", async () => {
+  it("reports the repo correctly", async () => {
     const info = await git.info();
     expect(info.root).toBe(repo.root);
     expect(info.hasHead).toBe(true);
@@ -54,41 +54,41 @@ describe("NodeGitClient — gestagede scope met alle bestandssoorten", () => {
     expect(info.inMergeOrRebase).toBe(false);
   });
 
-  it("levert een gewijzigd bestand met kloppende tellingen", async () => {
+  it("yields a modified file with correct counts", async () => {
     const diff = await git.diff("staged");
-    const f = byPath(diff.files, "src/behouden.ts");
+    const f = byPath(diff.files, "src/kept.ts");
     expect(f?.status).toBe("modified");
     expect(f?.additions).toBe(2);
     expect(f?.deletions).toBe(1);
     expect(f?.hunks.length).toBeGreaterThan(0);
   });
 
-  it("levert een toegevoegd bestand", async () => {
+  it("yields an added file", async () => {
     const diff = await git.diff("staged");
-    const f = byPath(diff.files, "src/nieuw.ts");
+    const f = byPath(diff.files, "src/added.ts");
     expect(f?.status).toBe("added");
     expect(f?.oldPath).toBeNull();
     expect(f?.additions).toBe(1);
   });
 
-  it("levert een verwijderd bestand onder zijn oude pad", async () => {
+  it("yields a deleted file under its old path", async () => {
     const diff = await git.diff("staged");
-    const f = byPath(diff.files, "src/weg.ts");
+    const f = byPath(diff.files, "src/gone.ts");
     expect(f?.status).toBe("deleted");
     expect(f?.newPath).toBeNull();
     expect(f?.deletions).toBe(1);
   });
 
-  it("detecteert de rename in plaats van add + delete", async () => {
+  it("detects the rename instead of an add plus a delete", async () => {
     const diff = await git.diff("staged");
-    const f = byPath(diff.files, "src/hernoemd.ts");
+    const f = byPath(diff.files, "src/renamed.ts");
     expect(f?.status).toBe("renamed");
-    expect(f?.oldPath).toBe("src/hernoem-mij.ts");
-    expect(f?.newPath).toBe("src/hernoemd.ts");
-    expect(byPath(diff.files, "src/hernoem-mij.ts")).toBeUndefined();
+    expect(f?.oldPath).toBe("src/rename-me.ts");
+    expect(f?.newPath).toBe("src/renamed.ts");
+    expect(byPath(diff.files, "src/rename-me.ts")).toBeUndefined();
   });
 
-  it("markeert het binaire bestand zonder hunks", async () => {
+  it("marks the binary file and gives it no hunks", async () => {
     const diff = await git.diff("staged");
     const f = byPath(diff.files, "assets/logo.png");
     expect(f?.binary).toBe(true);
@@ -96,14 +96,14 @@ describe("NodeGitClient — gestagede scope met alle bestandssoorten", () => {
     expect(f?.hunks).toHaveLength(0);
   });
 
-  it("houdt paden met spaties en niet-ASCII tekens intact, in POSIX-vorm", async () => {
+  it("keeps paths with spaces and non-ASCII characters intact, in POSIX form", async () => {
     const diff = await git.diff("staged");
-    const f = byPath(diff.files, "map met spatie/café.ts");
+    const f = byPath(diff.files, "dir with space/café.ts");
     expect(f).toBeDefined();
     expect(f?.path).not.toContain("\\");
   });
 
-  it("neemt untracked bestanden alleen in de working-scope mee", async () => {
+  it("includes untracked files in the working scope only", async () => {
     const staged = await git.diff("staged");
     expect(byPath(staged.files, "untracked.txt")).toBeUndefined();
 
@@ -112,59 +112,59 @@ describe("NodeGitClient — gestagede scope met alle bestandssoorten", () => {
     expect(f?.status).toBe("added");
     expect(f?.additions).toBe(1);
 
-    const zonder = await git.diff("working", { includeUntracked: false });
-    expect(byPath(zonder.files, "untracked.txt")).toBeUndefined();
+    const without = await git.diff("working", { includeUntracked: false });
+    expect(byPath(without.files, "untracked.txt")).toBeUndefined();
   });
 
-  it("telt totalen over de hele diff", async () => {
+  it("totals up the whole diff", async () => {
     const diff = await git.diff("staged");
-    const som = diff.files.reduce(
+    const sum = diff.files.reduce(
       (acc, f) => ({ a: acc.a + f.additions, d: acc.d + f.deletions }),
       { a: 0, d: 0 },
     );
-    expect(diff.additions).toBe(som.a);
-    expect(diff.deletions).toBe(som.d);
-    expect(diff.changedLines).toBe(som.a + som.d);
+    expect(diff.additions).toBe(sum.a);
+    expect(diff.deletions).toBe(sum.d);
+    expect(diff.changedLines).toBe(sum.a + sum.d);
   });
 
-  it("respecteert het aantal contextregels", async () => {
-    const ruim = await git.diff("staged", { context: 5 });
-    const krap = await git.diff("staged", { context: 0 });
-    const ruimLines = byPath(ruim.files, "src/behouden.ts")?.hunks[0]?.lines.length ?? 0;
-    const krapLines = byPath(krap.files, "src/behouden.ts")?.hunks[0]?.lines.length ?? 0;
-    expect(ruimLines).toBeGreaterThan(krapLines);
-    expect(krapLines).toBe(3);
+  it("honours the number of context lines", async () => {
+    const wide = await git.diff("staged", { context: 5 });
+    const narrow = await git.diff("staged", { context: 0 });
+    const wideLines = byPath(wide.files, "src/kept.ts")?.hunks[0]?.lines.length ?? 0;
+    const narrowLines = byPath(narrow.files, "src/kept.ts")?.hunks[0]?.lines.length ?? 0;
+    expect(wideLines).toBeGreaterThan(narrowLines);
+    expect(narrowLines).toBe(3);
   });
 
-  it("levert bestandsinhoud aan beide kanten van de diff", async () => {
-    const oud = await git.fileContent("src/behouden.ts", "old", "staged");
-    const nieuw = await git.fileContent("src/behouden.ts", "new", "staged");
-    expect(oud).toContain("export const b = 2;");
-    expect(nieuw).toContain("export const b = 22;");
-    expect(await git.fileContent("bestaat/niet.ts", "old", "staged")).toBeNull();
+  it("yields file content on both sides of the diff", async () => {
+    const before = await git.fileContent("src/kept.ts", "old", "staged");
+    const after = await git.fileContent("src/kept.ts", "new", "staged");
+    expect(before).toContain("export const b = 2;");
+    expect(after).toContain("export const b = 22;");
+    expect(await git.fileContent("does/not/exist.ts", "old", "staged")).toBeNull();
   });
 
-  it("levert een lege diff als er niets gestaged is", async () => {
-    const schoon = await TestRepo.create();
+  it("yields an empty diff when nothing is staged", async () => {
+    const clean = await TestRepo.create();
     try {
-      await schoon.write("a.txt", "x\n");
-      await schoon.addAll();
-      await schoon.commit("init");
-      const g = await NodeGitClient.open(schoon.root);
+      await clean.write("a.txt", "x\n");
+      await clean.addAll();
+      await clean.commit("init");
+      const g = await NodeGitClient.open(clean.root);
       const diff = await g.diff("staged");
       expect(diff.files).toEqual([]);
       expect(diff.changedLines).toBe(0);
     } finally {
-      await schoon.cleanup();
+      await clean.cleanup();
     }
   });
 });
 
-describe("NodeGitClient — repo zonder commits", () => {
-  it("diffs tegen de lege boom", async () => {
+describe("NodeGitClient — repo without commits", () => {
+  it("diffs against the empty tree", async () => {
     const repo = await TestRepo.create();
     try {
-      await repo.write("eerste.ts", "export const x = 1;\n");
+      await repo.write("first.ts", "export const x = 1;\n");
       await repo.addAll();
 
       const git = await NodeGitClient.open(repo.root);
@@ -172,7 +172,7 @@ describe("NodeGitClient — repo zonder commits", () => {
       expect(info.hasHead).toBe(false);
 
       const diff = await git.diff("staged");
-      const f = byPath(diff.files, "eerste.ts");
+      const f = byPath(diff.files, "first.ts");
       expect(f?.status).toBe("added");
       expect(f?.additions).toBe(1);
     } finally {
@@ -181,24 +181,24 @@ describe("NodeGitClient — repo zonder commits", () => {
   });
 });
 
-describe("NodeGitClient — amend-scope", () => {
-  it("diffs tegen de commit vóór HEAD", async () => {
+describe("NodeGitClient — amend scope", () => {
+  it("diffs against the commit before HEAD", async () => {
     const repo = await TestRepo.create();
     try {
-      await repo.write("a.txt", "een\n");
+      await repo.write("a.txt", "one\n");
       await repo.addAll();
-      await repo.commit("eerste");
-      await repo.write("a.txt", "een\ntwee\n");
+      await repo.commit("first");
+      await repo.write("a.txt", "one\ntwo\n");
       await repo.addAll();
-      await repo.commit("tweede");
-      // Extra wijziging die in de amend meegaat.
-      await repo.write("a.txt", "een\ntwee\ndrie\n");
+      await repo.commit("second");
+      // An extra change that the amend would carry along.
+      await repo.write("a.txt", "one\ntwo\nthree\n");
       await repo.addAll();
 
       const git = await NodeGitClient.open(repo.root);
       const diff = await git.diff("amend");
       const f = byPath(diff.files, "a.txt");
-      // Zowel de tweede commit als de nieuwe wijziging zitten in de scope.
+      // Both the second commit and the new change are in scope.
       expect(f?.additions).toBe(2);
       expect(f?.deletions).toBe(0);
     } finally {

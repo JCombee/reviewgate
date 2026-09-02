@@ -1,9 +1,9 @@
 import type { FileDetail, ReviewSummary } from "@reviewgate/core/api";
 
 /**
- * De review-id en het token staan in de URL waarmee de hook de browser opent
- * (`/r/<id>?token=…`). Beide gaan bij elke request mee; zonder token geeft de
- * server 403 (§3).
+ * The review id and the token sit in the URL the hook opens the browser with
+ * (`/r/<id>?token=…`). Both travel with every request; without a token the server
+ * answers 403 (§3).
  */
 export interface Ctx {
   id: string;

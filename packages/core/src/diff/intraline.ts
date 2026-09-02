@@ -1,8 +1,8 @@
 import type { DiffHunk, DiffLine } from "../types.js";
 
 /**
- * Een stuk van een regel dat wel of niet gewijzigd is. De UI kleurt alleen de
- * gewijzigde stukken fel; het regelvlak zelf blijft laag verzadigd (§8).
+ * A piece of a line that is or is not changed. The UI colours only the changed
+ * pieces brightly; the line background itself stays low-saturation (§8).
  */
 export interface IntralineSegment {
   start: number;
@@ -10,33 +10,33 @@ export interface IntralineSegment {
 }
 
 export interface IntralinePair {
-  /** Index van de verwijderde regel binnen `hunk.lines`. */
+  /** Index of the deleted line within `hunk.lines`. */
   delIndex: number;
-  /** Index van de toegevoegde regel binnen `hunk.lines`. */
+  /** Index of the added line within `hunk.lines`. */
   addIndex: number;
   delSegments: IntralineSegment[];
   addSegments: IntralineSegment[];
 }
 
 /**
- * Boven deze regellengte slaan we het per-teken vergelijken over: het levert bij
- * zulke regels toch geen leesbare highlight op en het kost onnodig tijd bij
- * gegenereerde bestanden met regels van duizenden tekens.
+ * Above this line length we skip per-character comparison: it yields no readable
+ * highlight on such lines anyway, and it costs needless time on generated files with
+ * lines thousands of characters long.
  */
 const MAX_LINE_LENGTH = 2000;
 
 /**
- * Als meer dan dit aandeel van de regel verschilt, is het geen bewerking maar een
- * vervanging. Alles highlighten is dan ruis, dus laten we de regel ongemarkeerd.
+ * If more than this share of the line differs, it is not an edit but a replacement.
+ * Highlighting everything is noise then, so we leave the line unmarked.
  */
 const MAX_CHANGE_RATIO = 0.6;
 
 /**
- * Koppelt verwijderde aan toegevoegde regels binnen een hunk en berekent per paar
- * welke stukken daadwerkelijk verschillen.
+ * Pairs deleted with added lines inside a hunk and works out, per pair, which pieces
+ * actually differ.
  *
- * De koppeling is positioneel: het n-de min-blok hoort bij het n-de plus-blok, net
- * zoals git-diff dat zelf doet. Dat is voorspelbaar en unit-testbaar.
+ * The pairing is positional: the nth minus block belongs with the nth plus block,
+ * just like git-diff itself does. That is predictable and unit-testable.
  */
 export function intralineDiff(hunk: DiffHunk): IntralinePair[] {
   const pairs: IntralinePair[] = [];
@@ -56,8 +56,8 @@ export function intralineDiff(hunk: DiffHunk): IntralinePair[] {
 
     const delCount = addStart - delStart;
     const addCount = i - addStart;
-    // Alleen blokken met evenveel regels aan beide kanten koppelen we één-op-één.
-    // Bij ongelijke blokken is er geen betrouwbare koppeling en laten we het.
+    // We pair one-to-one only for blocks of equal length. With unequal blocks there
+    // is no reliable pairing, so we leave it alone.
     if (delCount === 0 || addCount === 0 || delCount !== addCount) continue;
 
     for (let k = 0; k < delCount; k++) {
@@ -74,8 +74,8 @@ export function intralineDiff(hunk: DiffHunk): IntralinePair[] {
 }
 
 /**
- * Verschilstukken tussen twee regels, of null als markeren geen zin heeft
- * (identiek, te lang, of te veel verschil om nog een bewerking te zijn).
+ * The differing pieces between two lines, or null when marking makes no sense
+ * (identical, too long, or too much difference to still be an edit).
  */
 export function segmentsFor(
   before: string,
@@ -108,9 +108,9 @@ export function segmentsFor(
 // ---------------------------------------------------------------------------
 
 /**
- * Splitst een regel in tokens: woorden, losse leestekens en aaneengesloten
- * whitespace. Op woordgrens vergelijken geeft een rustiger highlight dan per
- * teken, dat bij code snel uiteenvalt in losse letters.
+ * Splits a line into tokens: words, individual punctuation and runs of whitespace.
+ * Comparing on word boundaries gives a calmer highlight than per character, which
+ * quickly falls apart into loose letters in code.
  */
 function tokenize(s: string): string[] {
   return s.match(/[\p{L}\p{N}_$]+|\s+|[^\p{L}\p{N}_$\s]/gu) ?? [];
@@ -130,7 +130,7 @@ function commonSuffix(a: readonly string[], b: readonly string[], prefix: number
   return n;
 }
 
-/** Tekenpositie van tokenbereik [from, to) binnen de oorspronkelijke regel. */
+/** Character position of token range [from, to) within the original line. */
 function spanOf(tokens: readonly string[], from: number, to: number): IntralineSegment {
   let start = 0;
   for (let i = 0; i < from; i++) start += (tokens[i] as string).length;

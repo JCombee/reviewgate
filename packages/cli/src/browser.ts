@@ -1,12 +1,12 @@
 import { execFile } from "node:child_process";
 
 /**
- * Opent een URL in de standaardbrowser, zonder shell.
+ * Opens a URL in the default browser, without a shell.
  *
- * Op Windows is `start` een cmd-ingebouwde; die roepen we expliciet via cmd aan met
- * een lege venstertitel, want `start "http://…"` zou de URL als titel opvatten.
- * Op macOS is het `open`, op Linux `xdg-open`. Lukt het niet, dan is dat geen fout:
- * de URL staat ook in de terminal (§4).
+ * On Windows `start` is a cmd builtin, so we call it through cmd with an empty window
+ * title: `start "http://…"` would take the URL as the title. On macOS it is `open`, on
+ * Linux `xdg-open`. If it fails that is not an error: the URL is in the terminal too
+ * (§4).
  */
 export function openBrowser(url: string): Promise<boolean> {
   const [cmd, args] =

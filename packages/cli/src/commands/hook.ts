@@ -6,8 +6,8 @@ import {
   diffHash,
   isIgnored,
   loadConfig,
-  parseUnifiedDiff,
   NodeGitClient,
+  parseUnifiedDiff,
   readApproval,
   renderApproved,
   renderChangesRequested,
@@ -25,12 +25,12 @@ import {
 import { openBrowser } from "../browser.js";
 
 /**
- * De blokkerende PreToolUse-hook (§2).
+ * The blocking PreToolUse hook (§2).
  *
- * Leest de hook-JSON van stdin, bepaalt of dit een commit is die gereviewd moet
- * worden, opent de review en blijft wachten tot er een beslissing valt. Faalt er
- * iets, dan laten we de commit door: een kapotte gate mag nooit het werk
- * blokkeren, alleen niet reviewen (§11).
+ * Reads the hook JSON from stdin, works out whether this is a commit that needs
+ * reviewing, opens the review and waits until a decision is made. If anything fails we
+ * let the commit through: a broken gate must never block the work, only fail to review
+ * it (§11).
  */
 
 export interface HookPayload {
@@ -53,7 +53,7 @@ export async function cmdHook(cwdFallback: string): Promise<number> {
   try {
     payload = JSON.parse(raw) as HookPayload;
   } catch {
-    // Onleesbare invoer: niets zeggen, niets blokkeren.
+    // Unreadable input: say nothing, block nothing.
     return 0;
   }
 
@@ -67,8 +67,8 @@ export async function cmdHook(cwdFallback: string): Promise<number> {
     await logError(cwd, err);
     return 0;
   } finally {
-    // Een server die deze hook zelf startte houdt anders de event loop open en
-    // laat het proces hangen nadat het oordeel al geprint is.
+    // A server this hook started itself would otherwise keep the event loop open and
+    // leave the process hanging after the verdict has already been printed.
     for (const stop of started) await stop().catch(() => {});
   }
 }
@@ -88,8 +88,8 @@ async function decide(
     return {
       kind: "deny",
       reason:
-        "`--no-verify` omzeilt de review-gate. Commit zonder die vlag; " +
-        "als een git-hook faalt, los dan die fout op in plaats van hem over te slaan.",
+        "`--no-verify` bypasses the review gate. Commit without that flag; " +
+        "if a git hook fails, fix that failure instead of skipping it.",
     };
   }
 
@@ -98,7 +98,7 @@ async function decide(
   const git = await NodeGitClient.open(cwd);
   const info = await git.info();
 
-  // Midden in een merge, rebase of cherry-pick heeft reviewen geen zin (§12).
+  // Halfway through a merge, rebase or cherry-pick, reviewing makes no sense (§12).
   if (info.inMergeOrRebase) return null;
 
   const config = await loadConfig(info.root);
@@ -107,8 +107,8 @@ async function decide(
   const patch = await git.rawDiff(analysis.scope, options);
   if (patch.trim() === "") return null;
 
-  // Genegeerde paden en te kleine diffs gaan zonder review door (§2). We tellen op
-  // de geparste diff, zodat lockfiles de telling niet opblazen.
+  // Ignored paths and diffs that are too small go through unreviewed (§2). We count on
+  // the parsed diff, so lockfiles cannot inflate the count.
   const files = parseUnifiedDiff(patch).filter((f) => !isIgnored(f.path, config.ignore));
   if (files.length === 0) return null;
   const changedLines = files.reduce((n, f) => n + f.additions + f.deletions, 0);
@@ -116,7 +116,7 @@ async function decide(
 
   const hash = diffHash(patch);
 
-  // Al goedgekeurd? Dan hoeft dezelfde diff niet nóg een keer langs de review (§2).
+  // Already approved? Then this diff need not go past the review a second time (§2).
   const approval = await readApproval(info.gitDir, hash);
   if (approval) {
     if (approval.editedCommitMessage && !usesMessageFile(analysis, info.gitDir)) {
@@ -136,11 +136,11 @@ async function decide(
     transcriptPath: payload.transcript_path ?? null,
   });
 
-  // In tests en op headless machines is de browser niet gewenst of niet aanwezig.
+  // In tests and on headless machines the browser is unwanted or absent.
   if (config.autoOpen && process.env["REVIEWGATE_NO_OPEN"] !== "1") await openBrowser(session.url);
 
-  // De omgevingsvariabele wint van de config; die is bedoeld om per aanroep bij te
-  // sturen, bijvoorbeeld in tests.
+  // The environment variable wins over the config; it exists to adjust things per
+  // invocation, in tests for instance.
   const fromEnv = Number.parseInt(process.env["REVIEWGATE_TIMEOUT_MS"] ?? "", 10);
   const result = await waitForDecision(info.gitDir, session.reviewId, {
     timeoutMs: Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : config.timeoutMs,
@@ -150,8 +150,8 @@ async function decide(
     return {
       kind: "deny",
       reason:
-        `De review is nog niet afgerond: ${session.url}\n\n` +
-        "Wacht op de gebruiker en probeer daarna opnieuw te committen.",
+        `The review has not been finished yet: ${session.url}\n\n` +
+        "Wait for the user, then try to commit again.",
     };
   }
 
@@ -169,12 +169,12 @@ async function decide(
 }
 
 /**
- * De reviewer heeft de commit message aangepast.
+ * The reviewer adjusted the commit message.
  *
- * Een PreToolUse-hook kan het commando niet herschrijven — er is geen veld waarmee
- * je `tool_input` mag aanpassen. Daarom schrijven we de message naar een bestand en
- * vragen we om precies één nieuwe poging met `-F`. Het approval-artifact staat er
- * al, dus die tweede poging loopt zonder review door.
+ * A PreToolUse hook cannot rewrite the command — there is no field that lets you
+ * change `tool_input`. So we write the message to a file and ask for exactly one more
+ * attempt with `-F`. The approval artifact is already there, so that second attempt
+ * goes through without a review.
  */
 async function denyForEditedMessage(gitDir: string, message: string): Promise<Verdict> {
   const file = path.join(gitDir, "reviewgate", "COMMIT_EDITMSG");
@@ -184,13 +184,13 @@ async function denyForEditedMessage(gitDir: string, message: string): Promise<Ve
   return {
     kind: "deny",
     reason:
-      "De review is goedgekeurd, maar de reviewer heeft de commit message aangepast.\n\n" +
-      `Commit opnieuw met exact deze message:\n\n    git commit -F ${toPosix(file)}\n\n` +
-      "De goedkeuring geldt nog, dus die poging loopt zonder nieuwe review door.",
+      "The review was approved, but the reviewer adjusted the commit message.\n\n" +
+      `Commit again with exactly this message:\n\n    git commit -F ${toPosix(file)}\n\n` +
+      "The approval still stands, so that attempt goes through without a new review.",
   };
 }
 
-/** Gebruikt het commando de door ons geschreven message al? Dan is het de tweede poging. */
+/** Does the command already use the message we wrote? Then this is the second attempt. */
 function usesMessageFile(analysis: CommitAnalysis, gitDir: string): boolean {
   if (!analysis.messageFile) return false;
   const expected = toPosix(path.join(gitDir, "reviewgate", "COMMIT_EDITMSG"));
@@ -205,8 +205,8 @@ async function ensureServer(
   const running = await findRunningServer(gitDir);
   if (running) return running;
 
-  // De hook blijft draaien zolang hij blokkeert, dus deze server leeft precies zo
-  // lang als de review. Daarna moet hij dicht, anders eindigt het hookproces niet.
+  // The hook keeps running for as long as it blocks, so this server lives exactly as
+  // long as the review. After that it has to close, or the hook process never ends.
   const server = await startServer({ cwd });
   started.push(server.close);
   return {
@@ -225,7 +225,7 @@ function emit(verdict: Verdict): void {
           hookSpecificOutput: {
             hookEventName: "PreToolUse",
             permissionDecision: "allow",
-            permissionDecisionReason: "Goedgekeurd in de review.",
+            permissionDecisionReason: "Approved in the review.",
           },
           ...(verdict.context ? { systemMessage: verdict.context } : {}),
         }
@@ -258,6 +258,6 @@ async function logError(cwd: string, err: unknown): Promise<void> {
     const line = `${new Date().toISOString()} ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`;
     await fs.appendFile(file, line, "utf8");
   } catch {
-    // Als zelfs loggen niet lukt, is stil falen het enige goede antwoord.
+    // If even logging fails, failing silently is the only right answer.
   }
 }

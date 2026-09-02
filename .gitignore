@@ -5,7 +5,7 @@ dist/
 .reviewgate.local.json
 coverage/
 .playwright-mcp/
-# Losse screenshots in de repo-root zijn wegwerpmateriaal; docs/-afbeeldingen niet.
+# Loose screenshots in the repo root are throwaway; images under docs/ are not.
 /*.png
 test-results/
 playwright-report/

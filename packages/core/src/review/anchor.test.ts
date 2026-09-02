@@ -12,7 +12,7 @@ const comment = (over: Partial<Comment> = {}): Comment => ({
   startLine: 42,
   endLine: 42,
   anchorSnippet: "  cache.forget(key);",
-  body: "mist de tag-variant",
+  body: "misses the tag variant",
   author: "user",
   status: "open",
   replies: [],
@@ -20,9 +20,9 @@ const comment = (over: Partial<Comment> = {}): Comment => ({
   ...over,
 });
 
-/** Bestand van `size` regels met het anker op `at` (1-based). */
+/** A file of `size` lines with the anchor at `anchorAt` (1-based). */
 function fileWith(anchorAt: number[], size = 100, anchor = "  cache.forget(key);"): FileLines {
-  const lines = Array.from({ length: size }, (_, i) => `regel ${i + 1}`);
+  const lines = Array.from({ length: size }, (_, i) => `line ${i + 1}`);
   for (const at of anchorAt) lines[at - 1] = anchor;
   return { get: () => lines };
 }
@@ -30,14 +30,14 @@ function fileWith(anchorAt: number[], size = 100, anchor = "  cache.forget(key);
 const noFiles: FileLines = { get: () => null };
 
 describe("reanchorComment", () => {
-  it("laat een comment staan als de regel niet verschoven is", () => {
+  it("leaves a comment alone when the line did not shift", () => {
     const res = reanchorComment(comment(), fileWith([42]));
     expect(res.outcome).toBe("unchanged");
     expect(res.comment.startLine).toBe(42);
     expect(res.comment.status).toBe("open");
   });
 
-  it("verschuift naar de nieuwe regel binnen het venster", () => {
+  it("shifts to the new line within the window", () => {
     const res = reanchorComment(comment(), fileWith([55]));
     expect(res.outcome).toBe("shifted");
     expect(res.comment.startLine).toBe(55);
@@ -45,44 +45,44 @@ describe("reanchorComment", () => {
     expect(res.comment.status).toBe("open");
   });
 
-  it("houdt de lengte van een range vast bij het verschuiven", () => {
+  it("keeps the length of a range while shifting", () => {
     const res = reanchorComment(comment({ startLine: 42, endLine: 48 }), fileWith([50]));
     expect([res.comment.startLine, res.comment.endLine]).toEqual([50, 56]);
   });
 
-  it("kiest binnen het venster de dichtstbijzijnde match", () => {
+  it("picks the nearest match inside the window", () => {
     const res = reanchorComment(comment(), fileWith([30, 45]));
     expect(res.comment.startLine).toBe(45);
   });
 
-  it("verplaatst naar de enige match ver buiten het venster", () => {
+  it("moves to the only match far outside the window", () => {
     const res = reanchorComment(comment(), fileWith([95]));
     expect(res.outcome).toBe("moved");
     expect(res.comment.startLine).toBe(95);
   });
 
-  it("wordt verouderd als het anker nergens meer staat", () => {
+  it("goes outdated when the anchor is nowhere to be found", () => {
     const res = reanchorComment(comment(), fileWith([]));
     expect(res.outcome).toBe("outdated");
     expect(res.comment.status).toBe("outdated");
   });
 
-  it("wordt verouderd bij meerdere matches ver buiten het venster", () => {
+  it("goes outdated on several matches far outside the window", () => {
     const res = reanchorComment(comment(), fileWith([90, 95]));
     expect(res.outcome).toBe("outdated");
   });
 
-  it("wordt verouderd als het bestand verdwenen is", () => {
+  it("goes outdated when the file is gone", () => {
     expect(reanchorComment(comment(), noFiles).outcome).toBe("outdated");
   });
 
-  it("wordt verouderd zonder anker", () => {
-    const zonder = comment();
-    delete zonder.anchorSnippet;
-    expect(reanchorComment(zonder, fileWith([42])).outcome).toBe("outdated");
+  it("goes outdated without an anchor", () => {
+    const without = comment();
+    delete without.anchorSnippet;
+    expect(reanchorComment(without, fileWith([42])).outcome).toBe("outdated");
   });
 
-  it("laat globale, opgeloste en verouderde comments met rust", () => {
+  it("leaves global, resolved and outdated comments alone", () => {
     expect(reanchorComment(comment({ scope: "global" }), fileWith([])).outcome).toBe("skipped");
     expect(reanchorComment(comment({ status: "resolved" }), fileWith([])).outcome).toBe("skipped");
     expect(reanchorComment(comment({ status: "outdated" }), fileWith([42])).outcome).toBe("skipped");
@@ -90,11 +90,11 @@ describe("reanchorComment", () => {
 });
 
 describe("reanchorComments", () => {
-  it("verwerkt de hele lijst en geeft per comment de uitkomst", () => {
+  it("handles the whole list and reports an outcome per comment", () => {
     const { comments, results } = reanchorComments(
       [
         comment({ id: "a", startLine: 42 }),
-        comment({ id: "b", startLine: 42, anchorSnippet: "bestaat niet meer" }),
+        comment({ id: "b", startLine: 42, anchorSnippet: "no longer exists" }),
         comment({ id: "c", scope: "global" }),
       ],
       fileWith([50]),

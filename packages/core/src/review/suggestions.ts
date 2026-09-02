@@ -2,15 +2,15 @@ import { randomUUID } from "node:crypto";
 import type { Review, Severity, Suggestion } from "./types.js";
 
 /**
- * De regels rond suggesties uit §9, als pure functies.
+ * The rules around suggestions from §9, as pure functions.
  *
- * Suggesties zijn géén comments: ze tellen niet mee voor de knop en gaan niet naar
- * Claude. De agent mag je aandacht ergens op vestigen, maar mag niet namens jou een
- * oordeel in de review zetten.
+ * Suggestions are *not* comments: they do not count towards the button and they do
+ * not go to Claude. The agent may draw your attention to something, but it may not
+ * put a judgement into the review on your behalf.
  */
 
 export interface SuggestionCapConfig {
-  /** Aantal gewijzigde regels per toegestaan voorstel. Default: 25. */
+  /** Changed lines per allowed suggestion. Default: 25. */
   perLines: number;
   min: number;
   max: number;
@@ -19,10 +19,10 @@ export interface SuggestionCapConfig {
 export const DEFAULT_CAP: SuggestionCapConfig = { perLines: 25, min: 2, max: 20 };
 
 /**
- * Hoeveel voorstellen er hoogstens mogen zijn: twee per vijftig gewijzigde regels,
- * met 2 als ondergrens en 20 als veiligheidsklep.
+ * The most suggestions there may be: two per fifty changed lines, with 2 as a floor
+ * and 20 as a safety valve.
  *
- * Het is een plafond, geen doel — nul voorstellen is een geldige uitkomst.
+ * It is a ceiling, not a target — zero suggestions is a valid outcome.
  */
 export function suggestionCap(changedLines: number, config = DEFAULT_CAP): number {
   const raw = Math.ceil(Math.max(0, changedLines) / config.perLines);
@@ -31,14 +31,14 @@ export function suggestionCap(changedLines: number, config = DEFAULT_CAP): numbe
 
 const SEVERITY_ORDER: Readonly<Record<Severity, number>> = {
   blocker: 0,
-  aandachtspunt: 1,
+  consideration: 1,
   nit: 2,
 };
 
 /**
- * De cap wordt server-side afgedwongen, niet alleen in de prompt gevraagd. Levert
- * de agent er meer, dan houden we de hoogste severity aan, daarna bestandsvolgorde
- * en regelnummer (§9).
+ * The cap is enforced server-side, not merely requested in the prompt. If the agent
+ * hands over more, we keep the highest severity first, then file order and line
+ * number (§9).
  */
 export function applyCap<T extends Pick<Suggestion, "severity" | "path" | "startLine">>(
   suggestions: readonly T[],
@@ -55,9 +55,9 @@ export function applyCap<T extends Pick<Suggestion, "severity" | "path" | "start
 }
 
 export interface DedupeConfig {
-  /** Drempel bij hetzelfde bestand met overlappende regels. */
+  /** Threshold within the same file on overlapping lines. */
   overlapping: number;
-  /** Drempel ongeacht locatie. */
+  /** Threshold regardless of location. */
   anywhere: number;
 }
 
@@ -69,12 +69,12 @@ export interface DuplicateMatch {
 }
 
 /**
- * Zoekt een eerder afgewezen voorstel dat vrijwel hetzelfde zegt.
+ * Looks for an earlier dismissed suggestion that says virtually the same thing.
  *
- * Deterministisch en unit-testbaar, geen model-oordeel: normaliseer de tekst en
- * vergelijk met Jaccard-similariteit over woord-trigrammen. Alleen voorstellen die
- * jij hebt afgewezen onderdrukken herhaling; voorstellen die bij een beslissing zijn
- * gesloten had je nooit beoordeeld en mogen dus terugkomen (§9).
+ * Deterministic and unit-testable, not a model judgement: normalise the text and
+ * compare with Jaccard similarity. Only suggestions *you* dismissed suppress
+ * repetition; suggestions closed along with a decision were never judged by you and
+ * so may come back (§9).
  */
 export function findDuplicate(
   candidate: Pick<Suggestion, "body" | "path" | "startLine" | "endLine">,
@@ -100,13 +100,13 @@ export function findDuplicate(
 }
 
 /**
- * Jaccard-similariteit over de woorden van de genormaliseerde tekst.
+ * Jaccard similarity over the words of the normalised text.
  *
- * Het plan noemde woord-trigrammen, maar die zijn veel te streng voor de drempels
- * die er ook in staan: "deze fetch heeft geen error-afhandeling" versus "deze fetch
- * heeft nog steeds geen error-afhandeling" komt op trigrammen uit op 0,25, ver onder
- * de 0,6 — de deduplicatie zou dan vrijwel nooit aanslaan. Op woordniveau is
- * datzelfde paar 0,75, en dat past wél bij 0,6 binnen een bestand en 0,8 daarbuiten.
+ * The plan called for word trigrams, but those are far too strict for the thresholds
+ * it also states: "this fetch has no error handling" against "this fetch still has no
+ * error handling" scores 0.25 on trigrams, well below 0.6 — deduplication would
+ * practically never fire. At word level that same pair is 0.75, which does fit 0.6
+ * within a file and 0.8 outside it.
  */
 export function similarity(a: string, b: string): number {
   const ta = words(normalize(a));
@@ -120,9 +120,8 @@ export function similarity(a: string, b: string): number {
 }
 
 /**
- * Lowercase, leestekens en regelnummers eruit, whitespace inklappen. Regelnummers
- * horen er expliciet uit: dezelfde opmerking op een verschoven regel is dezelfde
- * opmerking.
+ * Lowercase, punctuation and line numbers stripped, whitespace collapsed. Line
+ * numbers go explicitly: the same remark on a shifted line is the same remark.
  */
 export function normalize(text: string): string {
   return text
@@ -161,16 +160,16 @@ export interface IncomingSuggestion {
 export interface AddSuggestionsResult {
   review: Review;
   added: Suggestion[];
-  /** Automatisch afgewezen duplicaten, met hun score voor de dedupe-log (§15). */
+  /** Automatically dismissed duplicates, with their score for the dedupe log (§15). */
   duplicates: Array<{ suggestion: Suggestion; score: number }>;
-  /** Afgekapt door de cap; belandt in het sessiebestand, niet in de UI. */
+  /** Cut off by the cap; lands in the session file, not in the UI. */
   dropped: IncomingSuggestion[];
 }
 
 /**
- * Voegt de bevindingen van een pass toe: dedupe eerst, dan de cap over wat er
- * overblijft. Automatisch afgewezen duplicaten tellen niet mee voor de cap, anders
- * verdringt de historie de nieuwe bevindingen (§9).
+ * Adds the findings of a pass: dedupe first, then the cap over what remains.
+ * Automatically dismissed duplicates do not count towards the cap, otherwise the
+ * history would crowd out the new findings (§9).
  */
 export function addSuggestions(
   review: Review,
@@ -233,8 +232,8 @@ function build(
 }
 
 /**
- * Een voorstel afwijzen. Het verdwijnt nooit: het blijft in het bestand en in de
- * UI staan, zodat je kunt terugzien wat er is voorgesteld en wat je ermee deed.
+ * Dismissing a suggestion. It never disappears: it stays in the file and in the UI,
+ * so you can look back at what was proposed and what you did with it.
  */
 export function dismissSuggestion(review: Review, id: string): Review {
   return mapSuggestion(review, id, (s) => ({
@@ -244,7 +243,7 @@ export function dismissSuggestion(review: Review, id: string): Review {
   }));
 }
 
-/** Een automatisch afgewezen duplicaat alsnog heropenen; jij houdt het laatste woord. */
+/** Reopening an automatically dismissed duplicate; you keep the last word. */
 export function reopenSuggestion(review: Review, id: string): Review {
   return mapSuggestion(review, id, (s) => {
     const { dismissedReason: _reason, duplicateOf: _dup, ...rest } = s;
@@ -252,7 +251,7 @@ export function reopenSuggestion(review: Review, id: string): Review {
   });
 }
 
-/** Markeert een voorstel als overgenomen; de comment zelf maakt `addComment`. */
+/** Marks a suggestion as accepted; `addComment` makes the comment itself. */
 export function acceptSuggestion(review: Review, id: string, commentId: string): Review {
   return mapSuggestion(review, id, (s) => ({
     ...s,
@@ -262,8 +261,8 @@ export function acceptSuggestion(review: Review, id: string, commentId: string):
 }
 
 /**
- * Bij een beslissing gaan openstaande voorstellen dicht met reden `round_closed`.
- * Die onderdrukken géén herhaling: je had ze nooit beoordeeld (§9).
+ * On a decision, open suggestions close with reason `round_closed`. Those suppress
+ * no repetition: you never judged them (§9).
  */
 export function closeOpenSuggestions(review: Review): Review {
   return {

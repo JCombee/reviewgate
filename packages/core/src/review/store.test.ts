@@ -25,11 +25,11 @@ const input = {
   diffHash: "hash-1",
 };
 
-/** Sluit de huidige ronde af zoals `POST /decision` dat doet. */
+/** Closes the current round the way `POST /decision` does. */
 function withDecision(review: Review, decision: "approve" | "request_changes"): Review {
   const rounds = [...review.rounds];
   const last = rounds[rounds.length - 1];
-  if (!last) throw new Error("geen ronde");
+  if (!last) throw new Error("no round");
   rounds[rounds.length - 1] = { ...last, decision, decidedAt: new Date().toISOString() };
   return {
     ...review,
@@ -39,7 +39,7 @@ function withDecision(review: Review, decision: "approve" | "request_changes"): 
 }
 
 describe("ReviewStore", () => {
-  it("maakt een review met een eerste ronde", async () => {
+  it("creates a review with a first round", async () => {
     const { store } = await storeInTempRepo();
     const { review, newRound } = await store.findOrCreate(input);
     expect(newRound).toBe(false);
@@ -48,34 +48,37 @@ describe("ReviewStore", () => {
     expect(review.status).toBe("open");
   });
 
-  it("hergebruikt de review voor dezelfde diff, zodat comments een herstart overleven", async () => {
+  it("reuses the review for the same diff, so comments survive a restart", async () => {
     const { store, gitDir } = await storeInTempRepo();
     const { review: first } = await store.findOrCreate(input);
-    const { review } = addComment(first, { scope: "global", body: "blijft bestaan" });
+    const { review } = addComment(first, { scope: "global", body: "this sticks around" });
     await store.save(review);
 
-    // Een nieuwe store staat gelijk aan een herstart van de server.
+    // A fresh store is the same thing as a restart of the server.
     const fresh = new ReviewStore(gitDir);
     const { review: again, newRound } = await fresh.findOrCreate(input);
     expect(again.id).toBe(first.id);
     expect(newRound).toBe(false);
     expect(again.comments).toHaveLength(1);
-    expect(again.comments[0]?.body).toBe("blijft bestaan");
+    expect(again.comments[0]?.body).toBe("this sticks around");
   });
 
-  it("begint ronde 2 in dezelfde review na een request changes", async () => {
+  it("starts round 2 in the same review after a request changes", async () => {
     const { store } = await storeInTempRepo();
     const { review: first } = await store.findOrCreate(input);
-    const { review: withComment } = addComment(first, { scope: "global", body: "punt uit ronde 1" });
+    const { review: withComment } = addComment(first, {
+      scope: "global",
+      body: "point from round 1",
+    });
     await store.save(withDecision(withComment, "request_changes"));
 
     const { review: second, newRound } = await store.findOrCreate({
       ...input,
       diffHash: "hash-2",
-      commitMessage: "fix: opgevolgd",
+      commitMessage: "fix: addressed",
     });
 
-    // Zelfde review, zodat je kunt zien of je punten uit ronde 1 zijn opgevolgd.
+    // Same review, so you can see whether your round 1 points were addressed.
     expect(second.id).toBe(first.id);
     expect(newRound).toBe(true);
     expect(second.rounds).toHaveLength(2);
@@ -85,7 +88,7 @@ describe("ReviewStore", () => {
     expect(second.comments[0]?.round).toBe(1);
   });
 
-  it("begint een nieuwe review na een approve", async () => {
+  it("starts a new review after an approve", async () => {
     const { store } = await storeInTempRepo();
     const { review: first } = await store.findOrCreate(input);
     await store.save(withDecision(first, "approve"));
@@ -95,14 +98,14 @@ describe("ReviewStore", () => {
     expect(next.rounds).toHaveLength(1);
   });
 
-  it("begint een nieuwe review op een andere branch", async () => {
+  it("starts a new review on another branch", async () => {
     const { store } = await storeInTempRepo();
     const { review: first } = await store.findOrCreate(input);
     const { review: other } = await store.findOrCreate({ ...input, branch: "feature/x" });
     expect(other.id).not.toBe(first.id);
   });
 
-  it("werkt updatedAt bij en laat createdAt staan", async () => {
+  it("updates updatedAt and leaves createdAt alone", async () => {
     const { store } = await storeInTempRepo();
     const { review } = await store.findOrCreate(input);
     const saved = await store.save({ ...review, status: "abandoned" });
@@ -110,7 +113,7 @@ describe("ReviewStore", () => {
     expect(Date.parse(saved.updatedAt)).toBeGreaterThanOrEqual(Date.parse(review.updatedAt));
   });
 
-  it("raakt een verlaten review niet meer aan", async () => {
+  it("never touches an abandoned review again", async () => {
     const { store } = await storeInTempRepo();
     const { review: first } = await store.findOrCreate(input);
     await store.save({ ...first, status: "abandoned" });

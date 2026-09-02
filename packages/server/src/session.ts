@@ -2,11 +2,11 @@ import { randomUUID, randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  addSuggestions,
+  closeOpenSuggestions,
   diffHash,
   intralineDiff,
-  addSuggestions,
   loadConfig,
-  closeOpenSuggestions,
   openComments,
   reanchorComments,
   ReviewStore,
@@ -17,9 +17,9 @@ import {
   type Diff,
   type DiffOptions,
   type FileLines,
-  type ReviewGateConfig,
   type GitClient,
   type Review,
+  type ReviewGateConfig,
   type ReviewScope,
   type Side,
   type Suggestion,
@@ -38,7 +38,7 @@ export interface SessionInput {
   git: GitClient;
   scope: ReviewScope;
   options: DiffOptions;
-  /** Meegegeven door de hook in M3; bij een handmatige review leeg. */
+  /** Passed in by the hook in M3; empty for a manual review. */
   commitMessage?: string | null;
   claudeSessionId?: string | null;
   transcriptPath?: string | null;
@@ -47,12 +47,12 @@ export interface SessionInput {
 type Listener = (event: ReviewEvent) => void;
 
 /**
- * Eén review-sessie: de ingelezen diff, de persistente review en alles wat de UI
- * erover mag opvragen of eraan mag wijzigen.
+ * One review session: the parsed diff, the persistent review, and everything the UI
+ * may ask about it or change on it.
  */
 export class Session {
   readonly id = randomUUID();
-  /** In de review-URL; requests zonder dit token krijgen 403 (§3). */
+  /** Part of the review URL; requests without this token get a 403 (§3). */
   readonly token = randomBytes(24).toString("base64url");
   readonly createdAt = new Date().toISOString();
 
@@ -96,11 +96,12 @@ export class Session {
       transcriptPath: input.transcriptPath ?? null,
     });
 
-    // Bij een nieuwe ronde verschuiven de regelnummers; comments uit eerdere
-    // rondes moeten mee naar hun nieuwe plek, of verouderd raken (§5). De store
-    // heeft de ronde bewust nog niet weggeschreven, zodat de nieuwe ronde en de
-    // verplaatste comments in één keer op schijf komen.
-    const anchored = newRound ? await store.save(await reanchor(review, input.git, input.scope)) : review;
+    // On a new round the line numbers shift; comments from earlier rounds have to move
+    // to their new place, or go outdated (§5). The store deliberately has not written
+    // the round yet, so the new round and the moved comments land on disk together.
+    const anchored = newRound
+      ? await store.save(await reanchor(review, input.git, input.scope))
+      : review;
 
     const session = new Session(
       input.git,
@@ -128,8 +129,8 @@ export class Session {
   }
 
   /**
-   * Slaat een gemuteerde review op en stuurt hem naar alle open SSE-verbindingen,
-   * zodat een tweede tabblad meteen bijloopt.
+   * Saves a mutated review and pushes it to every open SSE connection, so a second
+   * tab catches up straight away.
    */
   async commit(next: Review): Promise<Review> {
     this.#review = await this.store.save(next);
@@ -147,16 +148,15 @@ export class Session {
       try {
         listener(event);
       } catch {
-        // Een kapotte verbinding mag de andere luisteraars niet meeslepen.
+        // A broken connection must not drag the other listeners down with it.
       }
     }
   }
 
-
   /**
-   * Sluit de ronde af. De regel dat approve onmogelijk is met openstaande comments
-   * wordt hier afgedwongen, niet alleen in de UI (§8): de UI is niet de enige plek
-   * waar die regel mag leven.
+   * Closes the round. The rule that approve is impossible with open comments is
+   * enforced here, not only in the UI (§8): the UI is not the only place that rule
+   * gets to live.
    */
   async decide(decision: Decision, summary: string | null): Promise<Review> {
     const open = openComments(this.#review);
@@ -166,7 +166,7 @@ export class Session {
 
     const rounds = [...this.#review.rounds];
     const last = rounds[rounds.length - 1];
-    if (!last) throw new Error("deze review heeft geen ronde");
+    if (!last) throw new Error("this review has no round");
 
     const trimmed = summary?.trim();
     rounds[rounds.length - 1] = {
@@ -176,15 +176,15 @@ export class Session {
       summary: trimmed ? trimmed : null,
     };
 
-    // Openstaande voorstellen gaan dicht met reden round_closed: die had je nooit
-    // beoordeeld, dus ze onderdrukken later geen herhaling (§9).
+    // Open suggestions close with reason round_closed: you never judged them, so they
+    // suppress no repetition later on (§9).
     const next: Review = {
       ...closeOpenSuggestions({ ...this.#review, rounds }),
       status: decision === "approve" ? "approved" : "changes_requested",
     };
 
-    // Eerst het approval-artifact, dan pas de review opslaan: de hook let op de
-    // review en mag pas doorlopen als het artifact er al is (§2).
+    // The approval artifact first, only then save the review: the hook watches the
+    // review and may not proceed until the artifact is already there (§2).
     if (decision === "approve") {
       const info = await this.git.info();
       await writeApproval(info.gitDir, {
@@ -200,26 +200,25 @@ export class Session {
     return this.commit(next);
   }
 
-
-  // --- chat en de automatische pass (§9) -----------------------------------
+  // --- chat and the automatic pass (§9) ------------------------------------
 
   get passStatus(): PassStatus {
     return this.#passStatus;
   }
 
   #agentOrThrow(): ReviewAgent {
-    if (!this.#agent) throw new AgentUnavailable("de reviewer-assistent is niet beschikbaar");
+    if (!this.#agent) throw new AgentUnavailable("the reviewer assistant is not available");
     return this.#agent;
   }
 
   /**
-   * Eén vraag in het chatpaneel. Het antwoord streamt met tokens tegelijk naar de
-   * UI; pas als het compleet is landt het in de review, zodat een afgebroken
-   * antwoord geen half bericht achterlaat.
+   * One question in the chat panel. The answer streams to the UI token by token; only
+   * once it is complete does it land in the review, so an aborted answer leaves no
+   * half message behind.
    */
   async chat(message: string): Promise<Review> {
     const trimmed = message.trim();
-    if (trimmed === "") throw new Error("een lege vraag levert niets op");
+    if (trimmed === "") throw new Error("an empty question yields nothing");
 
     const agent = this.#agentOrThrow();
     const withQuestion: Review = {
@@ -231,10 +230,10 @@ export class Session {
     };
     await this.commit(withQuestion);
 
-    // Bij de eerste vraag gaat de context mee; daarna hervat de SDK de sessie.
+    // The first question carries the context; after that the SDK resumes the session.
     const prompt =
       this.#review.chat.length <= 1
-        ? `${await agent.contextPrompt()}\n\n# Vraag\n\n${trimmed}`
+        ? `${await agent.contextPrompt()}\n\n# Question\n\n${trimmed}`
         : trimmed;
 
     const answer = await agent.ask(prompt, (text) => this.#emit({ type: "chat-token", text }));
@@ -249,13 +248,13 @@ export class Session {
   }
 
   /**
-   * De automatische eerste pass. Blokkeert niets: hij loopt naast het lezen, en de
-   * stand staat in de kopbalk. Levert suggesties, geen comments.
+   * The automatic first pass. It blocks nothing: it runs alongside your reading, and
+   * its state sits in the header bar. It yields suggestions, not comments.
    */
   async runReviewPass(): Promise<void> {
     if (this.#passStatus.state === "running") return;
     if (!this.#agent) {
-      this.#setPassStatus({ state: "failed", error: "de reviewer-assistent is niet beschikbaar" });
+      this.#setPassStatus({ state: "failed", error: "the reviewer assistant is not available" });
       return;
     }
 
@@ -285,10 +284,12 @@ export class Session {
   }
 
   /**
-   * Elke automatische afwijzing met score naar `dedupe.log`, zodat de drempels na
-   * echt gebruik bij te stellen zijn (§15).
+   * Every automatic dismissal with its score goes to `dedupe.log`, so the thresholds
+   * can be adjusted after real use (§15).
    */
-  async #logDedupe(duplicates: ReadonlyArray<{ suggestion: Suggestion; score: number }>): Promise<void> {
+  async #logDedupe(
+    duplicates: ReadonlyArray<{ suggestion: Suggestion; score: number }>,
+  ): Promise<void> {
     if (duplicates.length === 0) return;
     try {
       const info = await this.git.info();
@@ -305,7 +306,7 @@ export class Session {
       );
       await fs.appendFile(path.join(dir, "dedupe.log"), `${lines.join("\n")}\n`, "utf8");
     } catch {
-      // Logging mag de review nooit tegenhouden.
+      // Logging must never hold up the review.
     }
   }
 
@@ -339,9 +340,9 @@ export class Session {
   }
 
   /**
-   * Detail van één bestand: hunks, intraline-segmenten en de tokens van beide kanten.
-   * Per bestand opgevraagd, zodat een diff van duizenden regels niet in één
-   * response hoeft (§12) en de UI meteen kan renderen wat in beeld staat.
+   * Detail of one file: hunks, intraline segments and the tokens of both sides.
+   * Requested per file, so a diff of thousands of lines need not fit in a single
+   * response (§12) and the UI can render what is on screen right away.
    */
   async fileDetail(index: number): Promise<FileDetail | null> {
     const cached = this.#detailCache.get(index);
@@ -359,7 +360,7 @@ export class Session {
         : this.git.fileContent(file.newPath, "new", this.scope),
     ]);
 
-    // Eén palet per bestand, gedeeld door beide kanten.
+    // One palette per file, shared by both sides.
     const palette = new Palette();
     const [oldTok, newTok] = await Promise.all([
       oldContent === null
@@ -390,7 +391,7 @@ export class Session {
   }
 }
 
-/** Aantal regels; een afsluitende newline telt niet als extra lege regel. */
+/** Line count; a trailing newline does not count as an extra empty line. */
 function countLines(s: string): number {
   if (s === "") return 0;
   const withoutTrailing = s.endsWith("\n") ? s.slice(0, -1) : s;
@@ -402,20 +403,19 @@ function countLines(s: string): number {
 }
 
 /**
- * Approve terwijl er nog comments open staan. De UI hoort dit te voorkomen, maar
- * de server weigert het hoe dan ook — met de betreffende id's erbij (§8).
+ * Approve while comments are still open. The UI is supposed to prevent this, but the
+ * server refuses it either way — with the ids in question attached (§8).
  */
 export class DecisionConflict extends Error {
   constructor(readonly openCommentIds: string[]) {
-    super("er staan nog comments open");
+    super("there are still open comments");
     this.name = "DecisionConflict";
   }
 }
 
 /**
- * Zet de comments van een review over naar de nieuwe ronde. De bestandsinhoud wordt
- * per pad één keer opgehaald en gecachet: een review kan tientallen comments in
- * hetzelfde bestand hebben.
+ * Carries a review's comments over to the new round. File content is fetched once per
+ * path and cached: a review can hold dozens of comments in the same file.
  */
 async function reanchor(review: Review, git: GitClient, scope: ReviewScope): Promise<Review> {
   const keys = new Set<string>();

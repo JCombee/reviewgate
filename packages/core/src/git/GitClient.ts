@@ -1,41 +1,41 @@
 import type { Diff, DiffFile, ReviewScope } from "../types.js";
 
-/** De lege boom: scope-basis voor een repo zonder enige commit (§12). */
+/** The empty tree: the scope base for a repo without any commit (§12). */
 export const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 export interface RepoInfo {
-  /** Absoluut platformpad naar de repo-root. */
+  /** Absolute platform path to the repo root. */
   root: string;
-  /** Absoluut platformpad naar de .git-directory (of het gitdir-bestand bij worktrees). */
+  /** Absolute platform path to the .git directory (or the gitdir file for worktrees). */
   gitDir: string;
   branch: string | null;
-  /** false bij een verse repo zonder commits. */
+  /** false for a fresh repo without commits. */
   hasHead: boolean;
-  /** Een merge, rebase of cherry-pick is bezig; de gate slaat dan over (§12). */
+  /** A merge, rebase or cherry-pick is in progress; the gate then steps aside (§12). */
   inMergeOrRebase: boolean;
 }
 
 export interface DiffOptions {
-  /** Aantal contextregels; default 5, zoals §4 voorschrijft. */
+  /** Number of context lines; defaults to 5, as §4 prescribes. */
   context?: number;
-  /** Ook untracked bestanden meenemen (alleen zinvol bij scope "working"). */
+  /** Include untracked files too (only meaningful for scope "working"). */
   includeUntracked?: boolean;
-  /** Voor scope "range": de revisie-expressie, bijv. `main...HEAD`. */
+  /** For scope "range": the revision expression, e.g. `main...HEAD`. */
   range?: string;
 }
 
 /**
- * Alle git-interactie loopt via deze interface, zodat core testbaar blijft
- * zonder echte repo en er later een tweede implementatie naast kan (§4).
+ * All git interaction goes through this interface, so core stays testable without a
+ * real repo and a second implementation can live alongside it later (§4).
  */
 export interface GitClient {
   info(): Promise<RepoInfo>;
-  /** Ruwe patchtekst voor een scope. */
+  /** Raw patch text for a scope. */
   rawDiff(scope: ReviewScope, opts?: DiffOptions): Promise<string>;
-  /** Geparste, getypeerde diff voor een scope. */
+  /** Parsed, typed diff for a scope. */
   diff(scope: ReviewScope, opts?: DiffOptions): Promise<Diff>;
-  /** Volledige bestandsinhoud aan één kant van de diff, voor context-expansie (§7). */
+  /** Full file content on one side of the diff, for context expansion (§7). */
   fileContent(path: string, side: "old" | "new", scope: ReviewScope): Promise<string | null>;
-  /** Untracked bestanden als losse "added" entries. */
+  /** Untracked files as standalone "added" entries. */
   untrackedFiles(opts?: DiffOptions): Promise<DiffFile[]>;
 }

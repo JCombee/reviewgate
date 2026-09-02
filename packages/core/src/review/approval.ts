@@ -2,14 +2,14 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 /**
- * Het approval-artifact (§2): na een Approve legt de server vast dat déze diff is
- * goedgekeurd. Roept de agent daarna nog eens `git commit` aan — bijvoorbeeld omdat
- * een pre-commit hook van git zelf faalde — dan hoeft er niet opnieuw gereviewd te
- * worden. Verandert er ook maar iets aan de diff, dan verandert de hash en vervalt
- * het artifact vanzelf.
+ * The approval artifact (§2): after an Approve, the server records that *this* diff
+ * was approved. If the agent then calls `git commit` again — because a pre-commit
+ * hook of git's own failed, say — there is no need to review it a second time. Change
+ * anything at all about the diff and the hash changes, so the artifact lapses by
+ * itself.
  */
 
-/** Artifacts ouder dan dit vervallen; een goedkeuring van gisteren zegt niets. */
+/** Artifacts older than this lapse; yesterday's approval says nothing. */
 export const APPROVAL_TTL_MS = 24 * 60 * 60 * 1000;
 
 export interface Approval {
@@ -17,7 +17,7 @@ export interface Approval {
   reviewId: string;
   approvedAt: string;
   claudeSessionId: string | null;
-  /** Door de reviewer aangepaste commit message, of null. */
+  /** Commit message adjusted by the reviewer, or null. */
   editedCommitMessage: string | null;
   summary: string | null;
 }
@@ -38,7 +38,7 @@ export async function writeApproval(gitDir: string, approval: Approval): Promise
   await fs.rename(tmp, file);
 }
 
-/** Een geldig artifact voor deze diff, of null. Verlopen artifacts ruimen we op. */
+/** A valid artifact for this diff, or null. Expired artifacts get cleaned up. */
 export async function readApproval(
   gitDir: string,
   diffHash: string,
@@ -61,7 +61,7 @@ export async function readApproval(
   return approval;
 }
 
-/** Na een geslaagde commit is het artifact op. */
+/** After a successful commit the artifact is spent. */
 export async function consumeApproval(gitDir: string, diffHash: string): Promise<void> {
   await fs.rm(fileFor(gitDir, diffHash), { force: true });
 }

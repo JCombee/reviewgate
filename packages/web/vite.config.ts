@@ -5,7 +5,7 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
-    // De server serveert deze map; assetnamen zijn gehasht, dus lang cachebaar.
+    // The server serves this directory; asset names are hashed, so cacheable.
     outDir: "dist",
     emptyOutDir: true,
     target: "es2022",

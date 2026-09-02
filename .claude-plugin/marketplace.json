@@ -5,7 +5,7 @@
     {
       "name": "reviewgate",
       "source": "./plugin",
-      "description": "Lokale, browser-gebaseerde code review gate die opent zodra Claude Code wil committen."
+      "description": "A local, browser-based code review gate that opens as soon as Claude Code wants to commit."
     }
   ]
 }

@@ -4,10 +4,10 @@ import type { Ctx } from "../api.js";
 import type { ReviewApi } from "../lib/reviewClient.js";
 
 /**
- * Het chatpaneel naast de diff (§9).
+ * The chat panel next to the diff (§9).
  *
- * De assistent leest mee in de repo en in het transcript van de sessie die de code
- * schreef, maar wijzigt niets. Antwoorden komen woord voor woord binnen over SSE.
+ * The assistant reads along in the repo and in the transcript of the session that
+ * wrote the code, but changes nothing. Answers arrive word by word over SSE.
  */
 export function ChatPanel({
   ctx,
@@ -21,10 +21,10 @@ export function ChatPanel({
   ctx: Ctx;
   review: Review;
   api: ReviewApi;
-  /** Het antwoord dat nu binnenkomt, nog niet in de review opgeslagen. */
+  /** The answer currently arriving, not yet stored in the review. */
   streaming: string | null;
   passStatus: PassStatus;
-  /** Tekst die vanuit een voorstel naar de chat is gestuurd ("Bespreken"). */
+  /** Text sent to the chat from a suggestion ("Discuss"). */
   draft: string | null;
   onDraftUsed: () => void;
 }) {
@@ -50,14 +50,14 @@ export function ChatPanel({
     if (message === "" || busy) return;
     setBusy(true);
     setError(null);
-    // Meteen leegmaken: het antwoord streamt en dat duurt; je vraag staat dan al
-    // in het gesprek en hoort niet ook nog in het invoerveld te blijven staan.
+    // Clear it right away: the answer streams and that takes a while; your question is
+    // already in the conversation and should not linger in the input as well.
     setText("");
     try {
       await api.chat(message);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-      // Bij een fout krijg je je vraag terug, zodat je hem niet opnieuw hoeft te typen.
+      // On failure you get your question back, so you need not retype it.
       setText(message);
     } finally {
       setBusy(false);
@@ -75,7 +75,7 @@ export function ChatPanel({
     <div className="flex h-full flex-col border-l border-[var(--rg-border)] bg-[var(--rg-bg-sunken)]">
       <div className="flex items-center gap-2 border-b border-[var(--rg-border)] px-3 py-2">
         <span className="text-[11px] uppercase tracking-wide text-[var(--rg-text-faint)]">
-          Gesprek
+          Conversation
         </span>
         <PassIndicator status={passStatus} onRestart={() => void api.restartPass()} />
       </div>
@@ -83,21 +83,21 @@ export function ChatPanel({
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
         {review.chat.length === 0 && streaming === null && (
           <p className="text-[var(--rg-text-faint)]">
-            Vraag iets over deze wijziging. De assistent leest de repo en het transcript van de
-            sessie die de code schreef, en wijzigt niets.
+            Ask something about this change. The assistant reads the repo and the transcript of
+            the session that wrote the code, and changes nothing.
           </p>
         )}
 
         {review.chat.map((m) => (
           <div key={m.id} className="mb-3">
-            <p className="text-[var(--rg-text-faint)]">{m.role === "user" ? "jij" : "assistent"}</p>
+            <p className="text-[var(--rg-text-faint)]">{m.role === "user" ? "you" : "assistant"}</p>
             <p className="whitespace-pre-wrap">{m.body}</p>
           </div>
         ))}
 
         {streaming !== null && (
           <div className="mb-3">
-            <p className="text-[var(--rg-text-faint)]">assistent</p>
+            <p className="text-[var(--rg-text-faint)]">assistant</p>
             <p className="whitespace-pre-wrap">{streaming}</p>
           </div>
         )}
@@ -107,7 +107,7 @@ export function ChatPanel({
             {error}
             <br />
             <span className="text-[var(--rg-text-faint)]">
-              Zonder de assistent werkt de rest van de review gewoon door.
+              Without the assistant the rest of the review carries on as normal.
             </span>
           </p>
         )}
@@ -121,8 +121,8 @@ export function ChatPanel({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
           rows={3}
-          placeholder="vraag…"
-          aria-label="Vraag aan de assistent"
+          placeholder="question…"
+          aria-label="Question for the assistant"
           className="w-full resize-y rounded border border-[var(--rg-border)] bg-[var(--rg-bg)] px-2 py-1"
         />
         <div className="mt-1 flex items-center gap-2">
@@ -132,56 +132,56 @@ export function ChatPanel({
             onClick={() => void send()}
             className="rounded border border-[var(--rg-border-strong)] px-2 py-0.5 disabled:opacity-40"
           >
-            Vraag
+            Ask
           </button>
           <span className="text-[var(--rg-text-faint)]">⌘↵</span>
           <button
             type="button"
             disabled={text.trim() === ""}
             className="ml-auto text-[var(--rg-text-muted)] disabled:opacity-40"
-            title="Zet je vraag als vraag-comment in de review"
+            title="Put your question into the review as a question comment"
             onClick={() => {
               void api.addComment({ scope: "global", kind: "question", body: text });
               setText("");
             }}
           >
-            Vraag het de auteur
+            Ask the author
           </button>
         </div>
       </div>
 
       <p className="border-t border-[var(--rg-border)] px-3 py-1 text-[var(--rg-text-faint)]">
-        Read-only: de assistent leest, hij wijzigt niets.
+        Read-only: the assistant reads, it changes nothing.
       </p>
     </div>
   );
 }
 
-/** De stand van de automatische pass: een rustige regel, nooit een spinner of modal (§9). */
+/** The state of the automatic pass: a quiet line, never a spinner or a modal (§9). */
 function PassIndicator({ status, onRestart }: { status: PassStatus; onRestart: () => void }) {
   if (status.state === "running") {
-    return <span className="text-[var(--rg-text-faint)]">voorstellen zoeken…</span>;
+    return <span className="text-[var(--rg-text-faint)]">looking for suggestions…</span>;
   }
   if (status.state === "done") {
     return (
       <span className="text-[var(--rg-text-faint)]">
-        {status.count === 0 ? "geen voorstellen" : `${status.count} voorstellen`}
+        {status.count === 0 ? "no suggestions" : `${status.count} suggestions`}
       </span>
     );
   }
   if (status.state === "failed") {
     return (
       <span className="text-[var(--rg-text-faint)]" title={status.error}>
-        voorstellen mislukt ·{" "}
+        suggestions failed ·{" "}
         <button type="button" onClick={onRestart} className="underline">
-          opnieuw
+          try again
         </button>
       </span>
     );
   }
   return (
     <button type="button" onClick={onRestart} className="text-[var(--rg-text-faint)] underline">
-      voorstellen zoeken
+      look for suggestions
     </button>
   );
 }

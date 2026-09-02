@@ -2,15 +2,15 @@ import { NodeGitClient } from "@reviewgate/core";
 import { findRunningServer, startServer } from "@reviewgate/server";
 import { parseOpenArgs } from "../args.js";
 
-/** Server starten zonder review; bedoeld voor ontwikkeling (§6). */
+/** Start the server without a review; meant for development (§6). */
 export async function cmdServe(argv: readonly string[], cwd: string): Promise<number> {
   const args = parseOpenArgs(argv, cwd);
   const server = await startServer({
     cwd: args.cwd,
     ...(args.port ? { port: args.port } : {}),
   });
-  process.stdout.write(`ReviewGate server op http://127.0.0.1:${server.port}\n`);
-  process.stdout.write("Ctrl+C om te stoppen.\n");
+  process.stdout.write(`ReviewGate server on http://127.0.0.1:${server.port}\n`);
+  process.stdout.write("Ctrl+C to stop.\n");
 
   await new Promise<void>((resolve) => {
     const done = () => void server.close().then(resolve, resolve);
@@ -20,7 +20,7 @@ export async function cmdServe(argv: readonly string[], cwd: string): Promise<nu
   return 0;
 }
 
-/** Draaiende server en open reviews tonen (§6). */
+/** Show the running server and the open reviews (§6). */
 export async function cmdStatus(argv: readonly string[], cwd: string): Promise<number> {
   const args = parseOpenArgs(argv, cwd);
   const git = await NodeGitClient.open(args.cwd);
@@ -28,7 +28,7 @@ export async function cmdStatus(argv: readonly string[], cwd: string): Promise<n
 
   const record = await findRunningServer(info.gitDir);
   if (!record) {
-    process.stdout.write(`Geen draaiende server voor ${info.root}.\n`);
+    process.stdout.write(`No server running for ${info.root}.\n`);
     return 0;
   }
 
@@ -37,8 +37,8 @@ export async function cmdStatus(argv: readonly string[], cwd: string): Promise<n
   process.stdout.write(
     [
       `Repo:     ${info.root}`,
-      `Server:   http://127.0.0.1:${record.port} (pid ${record.pid}, versie ${health.version ?? record.version})`,
-      `Gestart:  ${record.startedAt}`,
+      `Server:   http://127.0.0.1:${record.port} (pid ${record.pid}, version ${health.version ?? record.version})`,
+      `Started:  ${record.startedAt}`,
       `Reviews:  ${health.sessions ?? 0} open`,
       "",
     ].join("\n"),

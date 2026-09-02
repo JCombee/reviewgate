@@ -11,11 +11,11 @@ const HUNK_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)$/;
 const SUBMODULE_MODE = "160000";
 
 /**
- * Parser voor `git diff -U<n> --no-color` output.
+ * Parser for `git diff -U<n> --no-color` output.
  *
- * Bewust dun: hij levert precies de structuur die anchoring en de UI nodig hebben (§4).
- * Hij normaliseert niets aan de regelinhoud — CRLF-checkouts leveren wat git levert,
- * en alleen de regelscheiding wordt CRLF-veilig gesplitst (§12).
+ * Deliberately thin: it produces exactly the structure anchoring and the UI need (§4).
+ * It normalises nothing about the line content — CRLF checkouts get whatever git
+ * hands over, and only the line separation is split CRLF-safely (§12).
  */
 export function parseUnifiedDiff(patch: string): DiffFile[] {
   const lines = patch.split(/\r?\n/);
@@ -23,13 +23,13 @@ export function parseUnifiedDiff(patch: string): DiffFile[] {
 
   let file: MutableFile | null = null;
   let hunk: DiffHunk | null = null;
-  /** De laatst geopende hunk, ook als hij al gesloten is. Alleen voor de `\`-marker. */
+  /** The most recently opened hunk, even once closed. Only for the `\` marker. */
   let lastHunk: DiffHunk | null = null;
   let oldLine = 0;
   let newLine = 0;
-  // Resterende regels volgens de hunk-header. Zodra beide op nul staan is de hunk
-  // compleet en hoort wat volgt weer bij het bestandsniveau. Zonder deze teller
-  // komt de lege slotregel die elke patch heeft binnen als lege contextregel.
+  // Lines remaining according to the hunk header. Once both hit zero the hunk is
+  // complete and what follows belongs to the file level again. Without this counter
+  // the trailing empty line every patch has comes in as an empty context line.
   let oldLeft = 0;
   let newLeft = 0;
 
@@ -50,13 +50,13 @@ export function parseUnifiedDiff(patch: string): DiffFile[] {
       continue;
     }
 
-    // Regels vóór het eerste `diff --git` (bijv. commit-headers) negeren we.
+    // Lines before the first `diff --git` (commit headers, say) are ignored.
     if (!file) continue;
     const f: MutableFile = file;
 
     if (line.startsWith("\\")) {
-      // "\ No newline at end of file" hoort bij de regel ervoor. Dat kan de laatste
-      // regel van een net volgelopen hunk zijn, dus val terug op de vorige hunk.
+      // "\ No newline at end of file" belongs to the line before it. That can be the
+      // last line of a hunk that just filled up, so fall back to the previous hunk.
       const target = hunk ?? lastHunk;
       const prev = target?.lines[target.lines.length - 1];
       if (prev) prev.noNewlineAtEof = true;
@@ -100,14 +100,14 @@ export function parseUnifiedDiff(patch: string): DiffFile[] {
       f.deletions++;
       oldLeft--;
     } else if (marker === " " || line === "") {
-      // Een lege regel binnen een nog niet volle hunk is een lege contextregel
-      // waarvan de spatie onderweg is weggeknipt; behandel hem als context.
+      // An empty line inside a not-yet-full hunk is an empty context line whose
+      // leading space was trimmed along the way; treat it as context.
       hunk.lines.push(mkLine("context", marker === " " ? content : "", oldLine++, newLine++));
       oldLeft--;
       newLeft--;
     } else {
-      // Onbekende regel binnen een hunk (bijv. het begin van een volgend bestand
-      // zonder `diff --git`): sluit de hunk en probeer hem als header te lezen.
+      // An unknown line inside a hunk (for instance the start of a next file without
+      // `diff --git`): close the hunk and try reading it as a header.
       hunk = null;
       readHeaderLine(f, line);
     }
@@ -119,7 +119,7 @@ export function parseUnifiedDiff(patch: string): DiffFile[] {
   return files;
 }
 
-/** Bouwt de complete `Diff` inclusief totalen voor een scope. */
+/** Builds the complete `Diff` including totals for a scope. */
 export function buildDiff(scope: ReviewScope, files: DiffFile[]): Diff {
   let additions = 0;
   let deletions = 0;
@@ -179,7 +179,7 @@ function mkLine(
   return { type, content, oldLine, newLine, noNewlineAtEof: false };
 }
 
-/** Leest één headerregel van een bestandsblok. Geeft true als de regel is verwerkt. */
+/** Reads one header line of a file block. Returns true if the line was handled. */
 function readHeaderLine(f: MutableFile, line: string): boolean {
   if (line.startsWith("old mode ")) {
     f.oldMode = line.slice("old mode ".length).trim();
@@ -228,7 +228,7 @@ function readHeaderLine(f: MutableFile, line: string): boolean {
     return true;
   }
   if (line.startsWith("index ")) {
-    // "index <old>..<new> <mode>" — de mode staat er alleen bij als hij ongewijzigd is.
+    // "index <old>..<new> <mode>" — the mode is only there when it is unchanged.
     const mode = /^index [0-9a-f]+\.\.[0-9a-f]+ (\d+)$/.exec(line)?.[1];
     if (mode) {
       f.oldMode ??= mode;
@@ -271,8 +271,8 @@ function finalizeFile(f: MutableFile): DiffFile {
           ? "mode_changed"
           : "modified");
 
-  // Een rename kan óók inhoudswijzigingen hebben; die blijft "renamed", want dat
-  // is wat de UI moet tonen. De hunks zitten er gewoon bij.
+  // A rename can carry content changes as well; it stays "renamed", because that is
+  // what the UI needs to show. The hunks simply come along.
   const path = f.newPath ?? f.oldPath ?? "";
 
   return {
@@ -294,7 +294,7 @@ function finalizeFile(f: MutableFile): DiffFile {
 /** `a/src/foo.ts` → `src/foo.ts`; `/dev/null` → null. */
 function stripPrefix(raw: string): string | null {
   let s = raw.trim();
-  // Een tijdstempel achter de padnaam (POSIX diff) knippen we eraf.
+  // A timestamp after the path name (POSIX diff) gets clipped off.
   const tab = s.indexOf("\t");
   if (tab !== -1) s = s.slice(0, tab);
   if (s === "/dev/null") return null;
@@ -304,13 +304,13 @@ function stripPrefix(raw: string): string | null {
 }
 
 /**
- * `diff --git a/x b/y` is ambigu bij paden met spaties. Dit is een fallback:
- * de ---/+++ regels en rename from/to zijn leidend en overschrijven dit later.
+ * `diff --git a/x b/y` is ambiguous for paths with spaces. This is a fallback: the
+ * ---/+++ lines and rename from/to lead and overwrite this later.
  */
 function parseGitHeaderPaths(rest: string): { old: string | null; new: string | null } {
   const trimmed = rest.trim();
 
-  // Meest voorkomende geval: geen spaties, of beide kanten identiek.
+  // Most common case: no spaces, or both sides identical.
   for (let i = 0; i < trimmed.length; i++) {
     if (trimmed[i] !== " ") continue;
     const left = trimmed.slice(0, i);
@@ -320,7 +320,7 @@ function parseGitHeaderPaths(rest: string): { old: string | null; new: string | 
       return { old: left.slice(2), new: right.slice(2) };
     }
   }
-  // Geen identieke helften: pak de eerste geldige splitsing.
+  // No identical halves: take the first valid split.
   for (let i = 0; i < trimmed.length; i++) {
     if (trimmed[i] !== " ") continue;
     const left = trimmed.slice(0, i);
@@ -332,7 +332,7 @@ function parseGitHeaderPaths(rest: string): { old: string | null; new: string | 
   return { old: null, new: null };
 }
 
-/** Git-stijl C-quoting terugdraaien, voor het geval quotePath toch aanstaat. */
+/** Undoes git-style C quoting, in case quotePath is on after all. */
 function unquote(s: string): string {
   const body = s.slice(1, -1);
   let out = "";
@@ -372,7 +372,7 @@ function unquote(s: string): string {
         out += next;
         break;
       default: {
-        // Octale byte-escape: \303\251 → é
+        // Octal byte escape: \303\251 → é
         const oct = body.slice(i, i + 3);
         if (/^[0-7]{3}$/.test(oct)) {
           bytes.push(Number.parseInt(oct, 8));

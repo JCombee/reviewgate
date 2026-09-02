@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { parseFindings, summarizeTranscript } from "./agent.js";
 
 describe("parseFindings", () => {
-  it("leest een gewone JSON-lijst", () => {
+  it("reads a plain JSON list", () => {
     const out = parseFindings(
-      '{"findings":[{"path":"a.ts","line":42,"endLine":48,"severity":"blocker","body":"mist de tag-variant"}]}',
+      '{"findings":[{"path":"a.ts","line":42,"endLine":48,"severity":"blocker","body":"misses the tag variant"}]}',
     );
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({
@@ -14,68 +14,70 @@ describe("parseFindings", () => {
       startLine: 42,
       endLine: 48,
       severity: "blocker",
-      body: "mist de tag-variant",
+      body: "misses the tag variant",
     });
   });
 
-  it("haalt de JSON uit een codeblok met tekst eromheen", () => {
+  it("pulls the JSON out of a code block with text around it", () => {
     const out = parseFindings(
-      'Hier zijn mijn bevindingen:\n\n```json\n{"findings":[{"path":"a.ts","line":1,"body":"iets"}]}\n```\n\nDat was het.',
+      'Here are my findings:\n\n```json\n{"findings":[{"path":"a.ts","line":1,"body":"something"}]}\n```\n\nThat was it.',
     );
     expect(out).toHaveLength(1);
   });
 
-  it("valt terug op aandachtspunt bij een onbekende severity", () => {
-    const out = parseFindings('{"findings":[{"path":"a.ts","line":1,"severity":"ernstig","body":"x"}]}');
-    expect(out[0]?.severity).toBe("aandachtspunt");
+  it("falls back to consideration for an unknown severity", () => {
+    const out = parseFindings(
+      '{"findings":[{"path":"a.ts","line":1,"severity":"severe","body":"x"}]}',
+    );
+    expect(out[0]?.severity).toBe("consideration");
   });
 
-  it("maakt er een globale bevinding van zonder pad of regel", () => {
-    const out = parseFindings('{"findings":[{"body":"de opzet klopt niet"}]}');
-    expect(out[0]).toMatchObject({ scope: "global", body: "de opzet klopt niet" });
+  it("makes it a global finding without a path or line", () => {
+    const out = parseFindings('{"findings":[{"body":"the whole shape is off"}]}');
+    expect(out[0]).toMatchObject({ scope: "global", body: "the whole shape is off" });
     expect(out[0]?.path).toBeUndefined();
   });
 
-  it("negeert bevindingen zonder tekst", () => {
+  it("ignores findings without text", () => {
     expect(parseFindings('{"findings":[{"path":"a.ts","line":1,"body":"   "}]}')).toEqual([]);
   });
 
-  it("geeft een lege lijst bij onleesbare of lege uitvoer", () => {
-    expect(parseFindings("geen JSON hier")).toEqual([]);
+  it("returns an empty list for unreadable or empty output", () => {
+    expect(parseFindings("no JSON here")).toEqual([]);
     expect(parseFindings('{"findings":[]}')).toEqual([]);
     expect(parseFindings("")).toEqual([]);
   });
 
-  it("negeert een endLine die vóór de startregel ligt", () => {
+  it("ignores an endLine that comes before the start line", () => {
     const out = parseFindings('{"findings":[{"path":"a.ts","line":10,"endLine":3,"body":"x"}]}');
     expect(out[0]?.endLine).toBeUndefined();
   });
 });
 
 describe("summarizeTranscript", () => {
-  it("houdt alleen de tekst van gebruiker en assistent over", () => {
+  it("keeps only the text of the user and the assistant", () => {
     const jsonl = [
-      JSON.stringify({ type: "user", message: { role: "user", content: "voeg caching toe" } }),
+      JSON.stringify({ type: "user", message: { role: "user", content: "add caching" } }),
       JSON.stringify({
         type: "assistant",
         message: {
           role: "assistant",
           content: [
-            { type: "text", text: "ik zet er een repository omheen" },
+            { type: "text", text: "I am wrapping a repository around it" },
             { type: "tool_use", name: "Edit", input: {} },
           ],
         },
       }),
       JSON.stringify({ type: "system", subtype: "init" }),
-      "geen json",
+      "not json",
     ].join("\n");
 
     expect(summarizeTranscript(jsonl)).toBe(
-      "Gebruiker: voeg caching toe\n\nClaude: ik zet er een repository omheen",
+      "User: add caching\n\nClaude: I am wrapping a repository around it",
     );
   });
 
-  it("geeft een lege string voor een leeg transcript", () => {
+  it("returns an empty string for an empty transcript", () => {
     expect(summarizeTranscript("")).toBe("");
   });
 });

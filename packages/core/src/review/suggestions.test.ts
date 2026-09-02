@@ -44,8 +44,8 @@ const suggestion = (over: Partial<Suggestion>): Suggestion => ({
   id: over.id ?? "s1",
   round: 1,
   scope: "line",
-  body: "iets",
-  severity: "aandachtspunt",
+  body: "something",
+  severity: "consideration",
   status: "pending",
   createdAt: "2026-01-01T00:00:00.000Z",
   ...over,
@@ -53,8 +53,8 @@ const suggestion = (over: Partial<Suggestion>): Suggestion => ({
 
 const incoming = (over: Partial<IncomingSuggestion> = {}): IncomingSuggestion => ({
   scope: "line",
-  body: "deze fetch heeft geen error-afhandeling",
-  severity: "aandachtspunt",
+  body: "this fetch has no error handling",
+  severity: "consideration",
   path: "a.ts",
   side: "new",
   startLine: 17,
@@ -62,123 +62,129 @@ const incoming = (over: Partial<IncomingSuggestion> = {}): IncomingSuggestion =>
 });
 
 describe("suggestionCap", () => {
-  it("schaalt mee met de diff: twee per vijftig regels", () => {
+  it("scales with the diff: two per fifty lines", () => {
     expect(suggestionCap(50)).toBe(2);
     expect(suggestionCap(200)).toBe(8);
     expect(suggestionCap(500)).toBe(20);
   });
 
-  it("houdt de ondergrens van twee aan bij een kleine diff", () => {
+  it("holds the floor of two on a small diff", () => {
     expect(suggestionCap(0)).toBe(2);
     expect(suggestionCap(10)).toBe(2);
   });
 
-  it("kapt af op twintig bij een enorme refactor", () => {
+  it("caps at twenty on an enormous refactor", () => {
     expect(suggestionCap(10_000)).toBe(20);
   });
 });
 
 describe("applyCap", () => {
-  it("houdt de hoogste severity aan, dan bestand en regelnummer", () => {
+  it("keeps the highest severity first, then file and line number", () => {
     const items = [
       { severity: "nit" as const, path: "a.ts", startLine: 1 },
       { severity: "blocker" as const, path: "z.ts", startLine: 99 },
-      { severity: "aandachtspunt" as const, path: "a.ts", startLine: 5 },
-      { severity: "aandachtspunt" as const, path: "a.ts", startLine: 2 },
+      { severity: "consideration" as const, path: "a.ts", startLine: 5 },
+      { severity: "consideration" as const, path: "a.ts", startLine: 2 },
     ];
     const { kept, dropped } = applyCap(items, 2);
-    expect(kept.map((k) => k.severity)).toEqual(["blocker", "aandachtspunt"]);
+    expect(kept.map((k) => k.severity)).toEqual(["blocker", "consideration"]);
     expect(kept[1]?.startLine).toBe(2);
     expect(dropped).toHaveLength(2);
   });
 });
 
-describe("normalize en similarity", () => {
-  it("haalt regelnummers weg, want een verschoven regel is dezelfde opmerking", () => {
-    expect(normalize("L42: mist de tag-variant")).toBe(normalize("L58: mist de tag-variant"));
+describe("normalize and similarity", () => {
+  it("strips line numbers, because a shifted line is the same remark", () => {
+    expect(normalize("L42: misses the tag variant")).toBe(normalize("L58: misses the tag variant"));
   });
 
-  it("geeft 1 voor identieke tekst", () => {
-    expect(similarity("de fetch heeft geen error-afhandeling", "de fetch heeft geen error-afhandeling")).toBe(1);
+  it("gives 1 for identical text", () => {
+    expect(similarity("the fetch has no error handling", "the fetch has no error handling")).toBe(1);
   });
 
-  it("geeft een lage score voor iets heel anders", () => {
-    expect(similarity("de fetch heeft geen error-afhandeling", "deze functie hoort in een andere map")).toBeLessThan(0.3);
+  it("gives a low score for something entirely different", () => {
+    expect(
+      similarity("the fetch has no error handling", "this function belongs in another directory"),
+    ).toBeLessThan(0.3);
   });
 
-  it("werkt ook bij korte teksten", () => {
-    expect(similarity("mist null-check", "mist null-check")).toBe(1);
-    expect(similarity("mist null-check", "verkeerde volgorde")).toBe(0);
+  it("works on short texts too", () => {
+    expect(similarity("missing null check", "missing null check")).toBe(1);
+    expect(similarity("missing null check", "wrong order")).toBe(0);
   });
 });
 
 describe("findDuplicate", () => {
   const dismissed = suggestion({
-    id: "oud",
-    body: "deze fetch heeft geen error-afhandeling",
+    id: "old",
+    body: "this fetch has no error handling",
     path: "a.ts",
     startLine: 17,
     status: "dismissed",
     dismissedReason: "user",
   });
 
-  it("herkent dezelfde opmerking op een verschoven regel in hetzelfde bestand", () => {
+  it("recognises the same remark on a shifted line in the same file", () => {
     const match = findDuplicate(
-      { body: "deze fetch heeft nog steeds geen error-afhandeling", path: "a.ts", startLine: 17 },
+      { body: "this fetch still has no proper error handling", path: "a.ts", startLine: 17 },
       [dismissed],
     );
-    expect(match?.duplicateOf).toBe("oud");
+    expect(match?.duplicateOf).toBe("old");
   });
 
-  it("laat een ander punt in hetzelfde bestand met rust", () => {
+  it("leaves a different point in the same file alone", () => {
     expect(
-      findDuplicate({ body: "deze variabele is nergens gebruikt", path: "a.ts", startLine: 17 }, [
+      findDuplicate({ body: "this variable is used nowhere", path: "a.ts", startLine: 17 }, [
         dismissed,
       ]),
     ).toBeNull();
   });
 
-  it("onderdrukt alleen wat jij hebt afgewezen, niet wat bij een beslissing dichtging", () => {
+  it("suppresses only what you dismissed, not what closed with a decision", () => {
     const closed = { ...dismissed, dismissedReason: "round_closed" as const };
     expect(
-      findDuplicate({ body: "deze fetch heeft geen error-afhandeling", path: "a.ts", startLine: 17 }, [
+      findDuplicate({ body: "this fetch has no error handling", path: "a.ts", startLine: 17 }, [
         closed,
       ]),
     ).toBeNull();
   });
 
-  it("negeert nog openstaande voorstellen", () => {
+  it("ignores suggestions that are still pending", () => {
     const pending = { ...dismissed, status: "pending" as const };
     expect(
-      findDuplicate({ body: "deze fetch heeft geen error-afhandeling", path: "a.ts" }, [pending]),
+      findDuplicate({ body: "this fetch has no error handling", path: "a.ts" }, [pending]),
     ).toBeNull();
   });
 
-  it("hanteert een strengere drempel buiten het oorspronkelijke bestand", () => {
-    const elders = { body: "deze fetch heeft nog steeds geen error-afhandeling", path: "b.ts" };
-    // Zelfde bestand haalt 0.6 wel, een ander bestand de vereiste 0.8 niet.
-    expect(findDuplicate({ ...elders, path: "a.ts", startLine: 17 }, [dismissed])).not.toBeNull();
-    expect(findDuplicate(elders, [dismissed])).toBeNull();
+  it("applies a stricter threshold outside the original file", () => {
+    const elsewhere = { body: "this fetch still has no proper error handling", path: "b.ts" };
+    // The same file clears 0.6; another file does not clear the required 0.8.
+    expect(findDuplicate({ ...elsewhere, path: "a.ts", startLine: 17 }, [dismissed])).not.toBeNull();
+    expect(findDuplicate(elsewhere, [dismissed])).toBeNull();
   });
 });
 
 describe("addSuggestions", () => {
-  it("voegt voorstellen toe als pending", () => {
+  it("adds suggestions as pending", () => {
     const { review: next, added } = addSuggestions(review(), [incoming()], { cap: 5 });
     expect(added).toHaveLength(1);
-    expect(next.suggestions[0]).toMatchObject({ status: "pending", round: 2, severity: "aandachtspunt" });
+    expect(next.suggestions[0]).toMatchObject({
+      status: "pending",
+      round: 2,
+      severity: "consideration",
+    });
   });
 
-  it("wijst een herhaald voorstel automatisch af, maar gooit het niet weg", () => {
-    const eerder = suggestion({
-      id: "oud",
-      body: "deze fetch heeft geen error-afhandeling",
+  it("auto-dismisses a repeated suggestion without throwing it away", () => {
+    const earlier = suggestion({
+      id: "old",
+      body: "this fetch has no error handling",
       path: "a.ts",
       startLine: 17,
       status: "dismissed",
       dismissedReason: "user",
     });
-    const { review: next, added, duplicates } = addSuggestions(review([eerder]), [incoming()], {
+    const { review: next, added, duplicates } = addSuggestions(review([earlier]), [incoming()], {
       cap: 5,
     });
 
@@ -189,14 +195,14 @@ describe("addSuggestions", () => {
     expect(next.suggestions[1]).toMatchObject({
       status: "dismissed",
       dismissedReason: "auto_duplicate",
-      duplicateOf: "oud",
+      duplicateOf: "old",
     });
   });
 
-  it("telt automatisch afgewezen duplicaten niet mee voor de cap", () => {
-    const eerder = suggestion({
-      id: "oud",
-      body: "deze fetch heeft geen error-afhandeling",
+  it("does not count auto-dismissed duplicates towards the cap", () => {
+    const earlier = suggestion({
+      id: "old",
+      body: "this fetch has no error handling",
       path: "a.ts",
       startLine: 17,
       status: "dismissed",
@@ -204,43 +210,43 @@ describe("addSuggestions", () => {
     });
     const items = [
       incoming(),
-      incoming({ body: "hier ontbreekt een null-check", startLine: 30 }),
-      incoming({ body: "deze naam dekt de lading niet", startLine: 40 }),
+      incoming({ body: "a null check is missing here", startLine: 30 }),
+      incoming({ body: "this name does not cover what it does", startLine: 40 }),
     ];
-    const { added, duplicates } = addSuggestions(review([eerder]), items, { cap: 2 });
+    const { added, duplicates } = addSuggestions(review([earlier]), items, { cap: 2 });
     expect(duplicates).toHaveLength(1);
-    // De cap van 2 geldt over de twee nieuwe bevindingen, niet over het duplicaat.
+    // The cap of 2 applies to the two new findings, not to the duplicate.
     expect(added).toHaveLength(2);
   });
 
-  it("kapt af op de cap en meldt wat er afviel", () => {
+  it("cuts off at the cap and reports what fell away", () => {
     const items = Array.from({ length: 5 }, (_, i) =>
-      incoming({ body: `punt nummer ${"x".repeat(i + 1)} anders`, startLine: 10 + i }),
+      incoming({ body: `point number ${"x".repeat(i + 1)} different`, startLine: 10 + i }),
     );
     const { added, dropped } = addSuggestions(review(), items, { cap: 2 });
     expect(added).toHaveLength(2);
     expect(dropped).toHaveLength(3);
   });
 
-  it("nul voorstellen is een geldige uitkomst", () => {
+  it("treats zero suggestions as a valid outcome", () => {
     const { review: next, added } = addSuggestions(review(), [], { cap: 5 });
     expect(added).toEqual([]);
     expect(next.suggestions).toEqual([]);
   });
 });
 
-describe("statuswisselingen", () => {
-  it("afwijzen bewaart het voorstel met reden", () => {
+describe("status changes", () => {
+  it("dismissing keeps the suggestion with its reason", () => {
     const next = dismissSuggestion(review([suggestion({ id: "s1" })]), "s1");
     expect(next.suggestions[0]).toMatchObject({ status: "dismissed", dismissedReason: "user" });
   });
 
-  it("heropenen haalt de afwijzing weg", () => {
+  it("reopening clears the dismissal", () => {
     const auto = suggestion({
       id: "s1",
       status: "dismissed",
       dismissedReason: "auto_duplicate",
-      duplicateOf: "oud",
+      duplicateOf: "old",
     });
     const next = reopenSuggestion(review([auto]), "s1");
     expect(next.suggestions[0]?.status).toBe("pending");
@@ -248,12 +254,12 @@ describe("statuswisselingen", () => {
     expect(next.suggestions[0]?.duplicateOf).toBeUndefined();
   });
 
-  it("overnemen wijst naar de comment die eruit voortkwam", () => {
+  it("accepting points at the comment it produced", () => {
     const next = acceptSuggestion(review([suggestion({ id: "s1" })]), "s1", "c9");
     expect(next.suggestions[0]).toMatchObject({ status: "accepted", promotedToCommentId: "c9" });
   });
 
-  it("een beslissing sluit openstaande voorstellen met round_closed", () => {
+  it("a decision closes open suggestions with round_closed", () => {
     const next = closeOpenSuggestions(
       review([suggestion({ id: "s1" }), suggestion({ id: "s2", status: "accepted" })]),
     );

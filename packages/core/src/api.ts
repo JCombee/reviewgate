@@ -1,6 +1,6 @@
 /**
- * De DTO's die server en web delen. Bewust een eigen entrypoint (`@reviewgate/core/api`):
- * de web-bundel mag niets van de node-kant van core meenemen.
+ * The DTOs that server and web share. Deliberately its own entrypoint
+ * (`@reviewgate/core/api`): the web bundle must carry nothing from core's node side.
  */
 import type { IntralinePair } from "./diff/intraline.js";
 import type {
@@ -18,7 +18,7 @@ export interface RepoSummary {
 }
 
 export interface FileSummary {
-  /** Positie in de reviewvolgorde; tevens de sleutel voor het detail-endpoint. */
+  /** Position in the review order; also the key for the detail endpoint. */
   index: number;
   path: string;
   oldPath: string | null;
@@ -33,7 +33,7 @@ export interface FileSummary {
 }
 
 export interface ReviewSummary {
-  /** Sessie-id in de URL; de review zelf heeft zijn eigen, persistente id. */
+  /** Session id in the URL; the review itself has its own, persistent id. */
   id: string;
   scope: ReviewScope;
   repo: RepoSummary;
@@ -42,52 +42,52 @@ export interface ReviewSummary {
   additions: number;
   deletions: number;
   changedLines: number;
-  /** De persistente review met comments, suggesties en rondes (§5). */
+  /** The persistent review with comments, suggestions and rounds (§5). */
   review: Review;
-  /** Stand van de automatische pass op het moment van laden. */
+  /** State of the automatic pass at the moment of loading. */
   passStatus: PassStatus;
 }
 
 /**
- * Eén gekleurd stukje tekst: de tekst plus een index in het palet van het bestand.
- * Een bestand gebruikt maar een handvol kleuren, dus de index scheelt bij grote
- * bestanden makkelijk de helft van de payload ten opzichte van kleuren per token.
+ * One coloured piece of text: the text plus an index into the file's palette. A file
+ * uses only a handful of colours, so the index easily saves half the payload compared
+ * with colours per token on large files.
  */
 export interface HighlightToken {
   t: string;
   c: number;
 }
 
-/** Tokens van één regel. Index in de array = regelnummer − 1. */
+/** Tokens of one line. The index in the array is the line number − 1. */
 export type HighlightLine = HighlightToken[];
 
-/** Kleurenpaar [licht, donker] waar `HighlightToken.c` naar verwijst. */
+/** Colour pair [light, dark] that `HighlightToken.c` points at. */
 export type PaletteEntry = readonly [light: string, dark: string];
 
 export interface FileHighlight {
-  /** Tokens van de oude kant, of null als die kant niet bestaat of te groot is. */
+  /** Tokens of the old side, or null when that side does not exist or is too large. */
   old: HighlightLine[] | null;
   new: HighlightLine[] | null;
-  /** Gedeeld door beide kanten van dit bestand. */
+  /** Shared by both sides of this file. */
   palette: PaletteEntry[];
-  /** Taal die shiki gebruikt heeft; "text" bij onbekend of overgeslagen. */
+  /** The language shiki used; "text" when unknown or skipped. */
   lang: string;
-  /** Highlighting overgeslagen omdat het bestand te groot is (§12). */
+  /** Highlighting skipped because the file is too large (§12). */
   skipped: boolean;
 }
 
 export interface FileDetail {
   index: number;
   file: DiffFile;
-  /** Per hunk de gekoppelde regels met hun verschilstukken; zelfde volgorde als `file.hunks`. */
+  /** Per hunk, the paired lines with their differing pieces; same order as `file.hunks`. */
   intraline: IntralinePair[][];
   highlight: FileHighlight;
-  /** Aantal regels aan elke kant, zodat de UI weet hoever context-expansie kan gaan. */
+  /** Line count on either side, so the UI knows how far context expansion can go. */
   oldLineCount: number;
   newLineCount: number;
 }
 
-/** Wat de UI meestuurt bij een nieuwe comment. */
+/** What the UI sends along with a new comment. */
 export interface CreateCommentBody {
   scope: CommentScope;
   kind?: CommentKind;
@@ -100,14 +100,14 @@ export interface CreateCommentBody {
   fromSuggestion?: string;
 }
 
-/** Stand van de automatische eerste pass, voor de kopbalk (§9). */
+/** State of the automatic first pass, for the header bar (§9). */
 export type PassStatus =
   | { state: "idle" }
   | { state: "running" }
   | { state: "done"; count: number }
   | { state: "failed"; error: string };
 
-/** Server-sent events op `/api/review/:id/events` (§7). */
+/** Server-sent events on `/api/review/:id/events` (§7). */
 export type ReviewEvent =
   | { type: "review"; review: Review }
   | { type: "chat-token"; text: string }

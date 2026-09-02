@@ -6,11 +6,10 @@ import { CommentThread } from "./CommentThread.jsx";
 import { DismissedSuggestions, SuggestionCard } from "./SuggestionCard.jsx";
 
 /**
- * Het overzicht boven de bestandenlijst: de commit message en de globale comments.
+ * The overview above the file list: the commit message and the global comments.
  *
- * De message is zowel bewerkbaar als becommentarieerbaar, en die twee staan los van
- * elkaar (§8): jij kunt hem goedzetten, óf Claude vragen hem zelf te herzien, of
- * allebei.
+ * The message is both editable and commentable, and those two are independent (§8):
+ * you can set it right yourself, or ask Claude to revise it, or both.
  */
 export function Overview({
   review,
@@ -30,8 +29,8 @@ export function Overview({
   const [adding, setAdding] = useState<"global" | "commit_message" | null>(null);
   const [saved, setSaved] = useState(false);
 
-  // De review kan ook van buitenaf wijzigen (SSE); dan loopt het veld mee zolang
-  // je er niet zelf in staat te typen.
+  // The review can change from the outside too (SSE); the field then follows along as
+  // long as you are not typing in it yourself.
   useEffect(() => {
     setDraft(edited ?? original ?? "");
   }, [edited, original]);
@@ -57,7 +56,7 @@ export function Overview({
 
       {original === null ? (
         <p className="text-[var(--rg-text-faint)]">
-          Handmatige review — er is geen commit message onderschept.
+          Manual review — no commit message was intercepted.
         </p>
       ) : (
         <>
@@ -66,18 +65,19 @@ export function Overview({
             onChange={(e) => setDraft(e.target.value)}
             onBlur={() => void saveMessage()}
             rows={3}
+            aria-label="Commit message"
             className="rg-code w-full resize-y rounded border border-[var(--rg-border)] bg-[var(--rg-bg-raised)] px-2 py-1"
           />
           <div className="mt-1 flex items-center gap-3 text-[var(--rg-text-muted)]">
             <button type="button" onClick={() => setAdding("commit_message")}>
-              Comment op de message
+              Comment on the message
             </button>
             {edited !== null && (
               <button type="button" onClick={() => setShowOriginal((v) => !v)}>
-                {showOriginal ? "verberg origineel" : "toon origineel"}
+                {showOriginal ? "hide original" : "show original"}
               </button>
             )}
-            {saved && <span className="text-[var(--rg-text-faint)]">bewaard</span>}
+            {saved && <span className="text-[var(--rg-text-faint)]">saved</span>}
           </div>
           {showOriginal && (
             <pre className="rg-code mt-1 whitespace-pre-wrap rounded bg-[var(--rg-bg-sunken)] px-2 py-1 text-[var(--rg-text-muted)]">
@@ -91,7 +91,7 @@ export function Overview({
         <div className="mt-2">
           {edited !== null && (
             <p className="mb-1 text-[var(--rg-text-faint)]">
-              Let op: de message is inmiddels ook zelf aangepast.
+              Note: the message itself has been adjusted as well.
             </p>
           )}
           {messageComments.map((c) => (
@@ -101,10 +101,10 @@ export function Overview({
       )}
 
       <h2 className="mt-4 mb-1 text-[11px] uppercase tracking-wide text-[var(--rg-text-faint)]">
-        Algemeen
+        General
       </h2>
       {globals.length === 0 && adding !== "global" && (
-        <p className="text-[var(--rg-text-faint)]">Nog geen algemene opmerkingen.</p>
+        <p className="text-[var(--rg-text-faint)]">No general remarks yet.</p>
       )}
       {globals.map((c) => (
         <CommentThread key={c.id} comment={c} api={api} />
@@ -120,7 +120,9 @@ export function Overview({
       {adding !== null ? (
         <CommentForm
           placeholder={
-            adding === "global" ? "Iets over de wijziging als geheel…" : "Iets over de message…"
+            adding === "global"
+              ? "Something about the change as a whole…"
+              : "Something about the message…"
           }
           onSubmit={async (body, kind) => {
             await api.addComment({ scope: adding, kind, body });
@@ -134,7 +136,7 @@ export function Overview({
           className="mt-1 text-[var(--rg-text-muted)]"
           onClick={() => setAdding("global")}
         >
-          + algemene opmerking
+          + general remark
         </button>
       )}
     </div>
@@ -142,9 +144,8 @@ export function Overview({
 }
 
 /**
- * Comments waarvan de regel in deze ronde niet meer terug te vinden is (§5). Ze
- * blijven zichtbaar — je wil kunnen zien wat je eerder opmerkte — maar tellen niet
- * meer mee als openstaand.
+ * Comments whose line can no longer be found in this round (§5). They stay visible —
+ * you want to see what you remarked on earlier — but no longer count as open.
  */
 function OutdatedComments({ comments, api }: { comments: readonly Comment[]; api: ReviewApi }) {
   const [open, setOpen] = useState(false);
@@ -158,7 +159,7 @@ function OutdatedComments({ comments, api }: { comments: readonly Comment[]; api
         className="text-[var(--rg-text-faint)]"
         aria-expanded={open}
       >
-        {open ? "▾" : "▸"} Verouderd ({comments.length})
+        {open ? "▾" : "▸"} Outdated ({comments.length})
       </button>
       {open && comments.map((c) => <CommentThread key={c.id} comment={c} api={api} />)}
     </div>

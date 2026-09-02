@@ -1,36 +1,36 @@
 ---
 name: reviewgate
-description: Leg uit hoe de ReviewGate-commitgate werkt en hoe je de feedback eruit verwerkt. Gebruik dit wanneer een commit geblokkeerd wordt met "Code review: changes requested", wanneer de gebruiker vraagt waarom een commit niet doorgaat, of wanneer je een review wil openen zonder te committen.
+description: Explains how the ReviewGate commit gate works and how to work through its feedback. Use this when a commit is blocked with "Code review: changes requested", when the user asks why a commit will not go through, or when you want to open a review without committing.
 ---
 
 # ReviewGate
 
-Elke `git commit` in deze repo gaat langs een menselijke review. Een PreToolUse-hook
-onderschept het commando, opent een review in de browser en blokkeert tot er een
-beslissing is. Die deny geldt in elke permission mode, dus de gate is niet te omzeilen.
+Every `git commit` in this repo goes past a human review. A PreToolUse hook intercepts
+the command, opens a review in the browser and blocks until there is a decision. That
+deny holds in every permission mode, so the gate cannot be bypassed.
 
-## Wat je moet doen als een commit geblokkeerd wordt
+## What to do when a commit is blocked
 
-De feedback komt terug als markdown, gegroepeerd per bestand, met regelnummers.
+The feedback comes back as markdown, grouped per file, with line numbers.
 
-1. **Punten zonder `?`** zijn dingen om te fixen. Doe dat in de code.
-2. **Punten met `?`** zijn vragen. Beantwoord die in je antwoord aan de gebruiker;
-   die hoef je niet te fixen.
-3. Staat er een **Samenvatting** bovenaan, lees die eerst: hij geeft de volgorde
-   en de richting, en gaat vóór de losse punten.
-4. Staat er een **Commit message**-blok, gebruik dan exact die message.
-5. Commit daarna opnieuw. Er volgt een nieuwe ronde van dezelfde review, waarin de
-   reviewer ziet of je eerdere punten zijn opgevolgd.
+1. **Points without a `?`** are things to fix. Fix them in the code.
+2. **Points with a `?`** are questions. Answer those in your reply to the user; they
+   need no fix.
+3. If there is a **Summary** at the top, read that first: it gives the order and the
+   direction, and it comes before the individual points.
+4. If there is a **Commit message** block, use exactly that message.
+5. Commit again afterwards. A new round of the same review follows, in which the
+   reviewer can see whether your earlier points were addressed.
 
-## Wat je niet moet doen
+## What not to do
 
-- Niet `--no-verify` gebruiken. Dat wordt geweigerd met een aparte melding.
-- Niet stagen en committen in één commando als je het kunt scheiden. Met
-  `git add -A && git commit` staat er op hook-tijd nog niets in de index, dus
-  reviewt de gate de hele working tree.
-- Niet zelf in `.git/reviewgate/` schrijven.
+- Do not use `--no-verify`. It is refused with a separate message.
+- Do not stage and commit in one command when you can separate them. With
+  `git add -A && git commit` nothing is in the index at hook time, so the gate reviews
+  the entire working tree.
+- Do not write into `.git/reviewgate/` yourself.
 
-## Een review openen zonder te committen
+## Opening a review without committing
 
-`reviewgate open --staged` toont de gestagede wijzigingen, `--working` de hele
-working tree. Het commando print een URL; geef die aan de gebruiker.
+`reviewgate open --staged` shows the staged changes, `--working` the whole working
+tree. The command prints a URL; hand that to the user.

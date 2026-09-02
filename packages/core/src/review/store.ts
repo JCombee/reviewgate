@@ -5,8 +5,8 @@ import type { ReviewScope } from "../types.js";
 import type { Review, Round } from "./types.js";
 
 /**
- * Reviews op schijf. Geen database — JSON-bestanden in `.git/reviewgate/reviews/`,
- * dat pad zit al buiten versiebeheer (§4).
+ * Reviews on disk. No database — JSON files in `.git/reviewgate/reviews/`, a path
+ * that is already outside version control (§4).
  */
 export class ReviewStore {
   constructor(private readonly gitDir: string) {}
@@ -45,8 +45,8 @@ export class ReviewStore {
   }
 
   /**
-   * Schrijft atomair: eerst een tijdelijk bestand, dan rename. Een halve review op
-   * schijf is erger dan een verouderde, en de server schrijft bij elke mutatie.
+   * Writes atomically: a temporary file first, then a rename. Half a review on disk
+   * is worse than a stale one, and the server writes on every mutation.
    */
   async save(review: Review): Promise<Review> {
     const next: Review = { ...review, updatedAt: new Date().toISOString() };
@@ -59,13 +59,13 @@ export class ReviewStore {
   }
 
   /**
-   * De review voor deze branch, met de juiste ronde erop.
+   * The review for this branch, with the right round on it.
    *
-   * Dezelfde diff levert dezelfde review met dezelfde ronde op, zodat comments een
-   * herstart van de server overleven. Een gewijzigde diff op een review waarin al
-   * changes zijn gevraagd is ronde n+1 van diezelfde review: alleen zo kun je bij
-   * ronde 2 zien of je punten uit ronde 1 zijn opgevolgd (§5). Alleen na een
-   * approve begint er een nieuwe review.
+   * The same diff yields the same review with the same round, so comments survive a
+   * restart of the server. A changed diff on a review where changes were already
+   * requested is round n+1 of that same review: only that way can you see, in round
+   * 2, whether your points from round 1 were addressed (§5). Only after an approve
+   * does a new review begin.
    */
   async findOrCreate(input: {
     repoRoot: string;
@@ -84,16 +84,16 @@ export class ReviewStore {
       const round = review.rounds[review.rounds.length - 1];
       if (!round) continue;
 
-      // Exact dezelfde ronde: gewoon verder waar je was.
+      // Exactly the same round: just carry on where you were.
       if (round.diffHash === input.diffHash && round.scope === input.scope && !round.decision) {
         return { review, newRound: false };
       }
 
-      // De code is aangepast na een "request changes": volgende ronde.
+      // The code changed after a "request changes": next round.
       //
-      // Bewust nog niet opslaan. De aanroeper verankert eerst de comments op hun
-      // nieuwe regels en slaat dan één keer op; anders is er een moment waarop de
-      // nieuwe ronde al op schijf staat met de regelnummers van de vorige (§5).
+      // Deliberately not saved here. The caller first re-anchors the comments onto
+      // their new lines and then saves once; otherwise there is a moment where the
+      // new round is on disk carrying the line numbers of the previous one (§5).
       if (round.decision === "request_changes") {
         const next: Review = {
           ...review,

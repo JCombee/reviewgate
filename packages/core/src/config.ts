@@ -2,23 +2,23 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 /**
- * `.reviewgate.json` in de repo-root (§13, M6). Alles is optioneel; wat ontbreekt
- * krijgt de standaardwaarde hieronder.
+ * `.reviewgate.json` in the repo root (§13, M6). Everything is optional; whatever is
+ * missing gets the default below.
  */
 export interface ReviewGateConfig {
-  /** Hoe lang de hook maximaal blokkeert, in milliseconden. */
+  /** How long the hook blocks at most, in milliseconds. */
   timeoutMs: number;
-  /** Diffs kleiner dan dit aantal gewijzigde regels gaan zonder review door. 0 = uit. */
+  /** Diffs smaller than this many changed lines go through unreviewed. 0 = off. */
   minLines: number;
-  /** Paden die niet meetellen voor de review-scope. */
+  /** Paths that do not count towards the review scope. */
   ignore: string[];
-  /** Browser automatisch openen. */
+  /** Open the browser automatically. */
   autoOpen: boolean;
-  /** De automatische eerste pass draaien (§9). */
+  /** Run the automatic first pass (§9). */
   autoReview: boolean;
-  /** Grenzen aan het aantal voorstellen (§9). */
+  /** Bounds on the number of suggestions (§9). */
   autoReviewCap: { perLines: number; min: number; max: number };
-  /** Drempels voor duplicaatdetectie (§9). */
+  /** Thresholds for duplicate detection (§9). */
   dedupe: { overlapping: number; anywhere: number };
   theme: "system" | "light" | "dark";
 }
@@ -26,7 +26,7 @@ export interface ReviewGateConfig {
 export const DEFAULT_CONFIG: ReviewGateConfig = {
   timeoutMs: 55 * 60 * 1000,
   minLines: 0,
-  // Lockfiles en buildoutput zeggen niets over de wijziging zelf.
+  // Lockfiles and build output say nothing about the change itself.
   ignore: [
     "package-lock.json",
     "pnpm-lock.yaml",
@@ -48,9 +48,9 @@ export const DEFAULT_CONFIG: ReviewGateConfig = {
 export const CONFIG_FILENAME = ".reviewgate.json";
 
 /**
- * Leest de config uit de repo-root. Een ontbrekend of kapot bestand levert de
- * standaardwaarden op: een fout in de configuratie mag het werk niet blokkeren,
- * hoogstens niet reviewen zoals bedoeld (§11).
+ * Reads the config from the repo root. A missing or broken file yields the defaults:
+ * a mistake in the configuration must not block the work, at most keep it from being
+ * reviewed the way it was meant to be (§11).
  */
 export async function loadConfig(repoRoot: string): Promise<ReviewGateConfig> {
   let raw: string;
@@ -111,8 +111,8 @@ export function mergeConfig(parsed: unknown): ReviewGateConfig {
 }
 
 /**
- * `autoReview` mag zowel een boolean zijn (aan/uit) als een object met de grenzen.
- * Zo hoef je voor alleen een andere cap geen apart blok bij te houden.
+ * `autoReview` may be a boolean (on/off) as well as an object with the bounds. That
+ * way you need no separate block just to change the cap.
  */
 function nested(autoReview: unknown, cap: unknown, key: string): unknown {
   const fromCap = (cap as Record<string, unknown> | undefined)?.[key];
@@ -137,7 +137,7 @@ function ratio(value: unknown, fallback: number): number {
 
 function boolean(value: unknown, fallback: boolean): boolean {
   if (typeof value === "boolean") return value;
-  // `autoReview: { ... }` betekent ook gewoon "aan".
+  // `autoReview: { ... }` simply means "on" as well.
   if (typeof value === "object" && value !== null) return true;
   return fallback;
 }
@@ -149,12 +149,12 @@ function stringArray(value: unknown, fallback: string[]): string[] {
 }
 
 /**
- * Matcht een repo-relatief POSIX-pad tegen een patroon.
+ * Matches a repo-relative POSIX path against a pattern.
  *
- * Klein en voorspelbaar in plaats van een volledige glob-bibliotheek: `**` staat
- * voor elk aantal padsegmenten, `*` blijft binnen één segment, `?` is één teken.
- * Een patroon zonder slash matcht ook op alleen de bestandsnaam, zodat
- * `pnpm-lock.yaml` werkt waar het bestand ook staat.
+ * Small and predictable instead of a full glob library: `**` stands for any number of
+ * path segments, `*` stays within one segment, `?` is a single character. A pattern
+ * without a slash also matches on just the file name, so `pnpm-lock.yaml` works
+ * wherever the file sits.
  */
 export function matchesPattern(filePath: string, pattern: string): boolean {
   if (pattern === "") return false;
@@ -177,7 +177,7 @@ function toRegex(pattern: string): RegExp {
     const ch = pattern[i] as string;
     if (ch === "*") {
       if (pattern[i + 1] === "*") {
-        // `**/` mag ook nul segmenten zijn, zodat `**/*.min.js` ook in de root werkt.
+        // `**/` may also be zero segments, so `**/*.min.js` works in the root too.
         i++;
         if (pattern[i + 1] === "/") {
           i++;

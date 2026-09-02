@@ -2,14 +2,14 @@ import type { CommentKind } from "@reviewgate/core/api";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 /**
- * Formulier voor een nieuwe comment of een reactie. Bewust klein: een tekstvlak,
- * de keuze tussen opmerking en vraag, en versturen met ⌘↵ (§8).
+ * The form for a new comment or a reply. Deliberately small: a text area, the choice
+ * between a remark and a question, and ⌘↵ to send (§8).
  */
 export function CommentForm({
   initialBody = "",
-  submitLabel = "Plaats",
+  submitLabel = "Comment",
   withKind = true,
-  placeholder = "Wat valt je op?",
+  placeholder = "What stands out?",
   onSubmit,
   onCancel,
 }: {
@@ -87,7 +87,7 @@ export function CommentForm({
           onClick={onCancel}
           className="px-2 py-0.5 text-[var(--rg-text-muted)]"
         >
-          Annuleer
+          Cancel
         </button>
 
         {withKind && (
@@ -97,7 +97,7 @@ export function CommentForm({
               checked={kind === "question"}
               onChange={(e) => setKind(e.target.checked ? "question" : "issue")}
             />
-            Dit is een vraag
+            This is a question
           </label>
         )}
         <span className="text-[var(--rg-text-faint)]">⌘↵</span>

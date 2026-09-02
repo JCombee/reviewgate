@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildDiff, parseUnifiedDiff } from "./parse.js";
 
 describe("parseUnifiedDiff", () => {
-  it("leest een gewijzigd bestand met correcte regelnummers", () => {
+  it("reads a modified file with correct line numbers", () => {
     const patch = [
       "diff --git a/src/foo.ts b/src/foo.ts",
       "index 83db48f..bf269f4 100644",
@@ -13,7 +13,7 @@ describe("parseUnifiedDiff", () => {
       "-  return a;",
       "+  const b = 2;",
       "+  return a + b;",
-      "   // klaar",
+      "   // done",
       "",
     ].join("\n");
 
@@ -37,7 +37,7 @@ describe("parseUnifiedDiff", () => {
     ]);
   });
 
-  it("herkent een nieuw bestand", () => {
+  it("recognises a new file", () => {
     const patch = [
       "diff --git a/new.txt b/new.txt",
       "new file mode 100644",
@@ -45,8 +45,8 @@ describe("parseUnifiedDiff", () => {
       "--- /dev/null",
       "+++ b/new.txt",
       "@@ -0,0 +1,2 @@",
-      "+een",
-      "+twee",
+      "+one",
+      "+two",
       "",
     ].join("\n");
 
@@ -58,57 +58,57 @@ describe("parseUnifiedDiff", () => {
     expect(file?.newMode).toBe("100644");
   });
 
-  it("herkent een verwijderd bestand en houdt het oude pad als sleutel", () => {
+  it("recognises a deleted file and keeps the old path as its key", () => {
     const patch = [
-      "diff --git a/weg.txt b/weg.txt",
+      "diff --git a/gone.txt b/gone.txt",
       "deleted file mode 100644",
       "index 9daeafb..0000000",
-      "--- a/weg.txt",
+      "--- a/gone.txt",
       "+++ /dev/null",
       "@@ -1,2 +0,0 @@",
-      "-een",
-      "-twee",
+      "-one",
+      "-two",
       "",
     ].join("\n");
 
     const [file] = parseUnifiedDiff(patch);
     expect(file?.status).toBe("deleted");
     expect(file?.newPath).toBeNull();
-    expect(file?.path).toBe("weg.txt");
+    expect(file?.path).toBe("gone.txt");
     expect(file?.deletions).toBe(2);
   });
 
-  it("herkent een pure rename zonder hunks", () => {
+  it("recognises a pure rename without hunks", () => {
     const patch = [
-      "diff --git a/oud.ts b/nieuw.ts",
+      "diff --git a/old.ts b/new.ts",
       "similarity index 100%",
-      "rename from oud.ts",
-      "rename to nieuw.ts",
+      "rename from old.ts",
+      "rename to new.ts",
       "",
     ].join("\n");
 
     const [file] = parseUnifiedDiff(patch);
     expect(file?.status).toBe("renamed");
-    expect(file?.oldPath).toBe("oud.ts");
-    expect(file?.newPath).toBe("nieuw.ts");
+    expect(file?.oldPath).toBe("old.ts");
+    expect(file?.newPath).toBe("new.ts");
     expect(file?.similarity).toBe(100);
     expect(file?.hunks).toHaveLength(0);
-    expect(file?.path).toBe("nieuw.ts");
+    expect(file?.path).toBe("new.ts");
   });
 
-  it("herkent een rename mét inhoudswijziging", () => {
+  it("recognises a rename that also changes content", () => {
     const patch = [
-      "diff --git a/oud.ts b/nieuw.ts",
+      "diff --git a/old.ts b/new.ts",
       "similarity index 87%",
-      "rename from oud.ts",
-      "rename to nieuw.ts",
+      "rename from old.ts",
+      "rename to new.ts",
       "index 83db48f..bf269f4 100644",
-      "--- a/oud.ts",
-      "+++ b/nieuw.ts",
+      "--- a/old.ts",
+      "+++ b/new.ts",
       "@@ -1,2 +1,2 @@",
-      " behouden",
-      "-oud",
-      "+nieuw",
+      " kept",
+      "-before",
+      "+after",
       "",
     ].join("\n");
 
@@ -119,7 +119,7 @@ describe("parseUnifiedDiff", () => {
     expect(file?.deletions).toBe(1);
   });
 
-  it("markeert binaire bestanden en geeft ze geen hunks", () => {
+  it("marks binary files and gives them no hunks", () => {
     const patch = [
       "diff --git a/logo.png b/logo.png",
       "new file mode 100644",
@@ -140,7 +140,7 @@ describe("parseUnifiedDiff", () => {
     expect(file?.additions).toBe(0);
   });
 
-  it("markeert 'Binary files ... differ' ook als binair", () => {
+  it("treats 'Binary files ... differ' as binary too", () => {
     const patch = [
       "diff --git a/logo.png b/logo.png",
       "index 1111111..2222222 100644",
@@ -153,16 +153,16 @@ describe("parseUnifiedDiff", () => {
     expect(file?.status).toBe("modified");
   });
 
-  it("hangt 'no newline at end of file' aan de juiste regel", () => {
+  it("attaches 'no newline at end of file' to the right line", () => {
     const patch = [
       "diff --git a/a.txt b/a.txt",
       "index 1111111..2222222 100644",
       "--- a/a.txt",
       "+++ b/a.txt",
       "@@ -1 +1 @@",
-      "-oud",
+      "-before",
       "\\ No newline at end of file",
-      "+nieuw",
+      "+after",
       "\\ No newline at end of file",
       "",
     ].join("\n");
@@ -174,7 +174,7 @@ describe("parseUnifiedDiff", () => {
     expect(lines[1]?.noNewlineAtEof).toBe(true);
   });
 
-  it("herkent een pure mode-wijziging", () => {
+  it("recognises a mode-only change", () => {
     const patch = [
       "diff --git a/script b/script",
       "old mode 100644",
@@ -188,7 +188,7 @@ describe("parseUnifiedDiff", () => {
     expect(file?.newMode).toBe("100755");
   });
 
-  it("herkent een submodule aan mode 160000", () => {
+  it("recognises a submodule by mode 160000", () => {
     const patch = [
       "diff --git a/vendor/lib b/vendor/lib",
       "index 1111111..2222222 160000",
@@ -204,31 +204,31 @@ describe("parseUnifiedDiff", () => {
     expect(file?.submodule).toBe(true);
   });
 
-  it("leest paden met spaties via de ---/+++ regels", () => {
+  it("reads paths with spaces from the ---/+++ lines", () => {
     const patch = [
-      "diff --git a/map met spatie/foo bar.ts b/map met spatie/foo bar.ts",
+      "diff --git a/dir with space/foo bar.ts b/dir with space/foo bar.ts",
       "index 1111111..2222222 100644",
-      "--- a/map met spatie/foo bar.ts",
-      "+++ b/map met spatie/foo bar.ts",
+      "--- a/dir with space/foo bar.ts",
+      "+++ b/dir with space/foo bar.ts",
       "@@ -1 +1 @@",
-      "-oud",
-      "+nieuw",
+      "-before",
+      "+after",
       "",
     ].join("\n");
 
     const [file] = parseUnifiedDiff(patch);
-    expect(file?.path).toBe("map met spatie/foo bar.ts");
+    expect(file?.path).toBe("dir with space/foo bar.ts");
   });
 
-  it("leest niet-ASCII paden, ook als quotePath toch aanstond", () => {
+  it("reads non-ASCII paths, even when quotePath was on after all", () => {
     const patch = [
       'diff --git "a/caf\\303\\251.ts" "b/caf\\303\\251.ts"',
       "index 1111111..2222222 100644",
       '--- "a/caf\\303\\251.ts"',
       '+++ "b/caf\\303\\251.ts"',
       "@@ -1 +1 @@",
-      "-oud",
-      "+nieuw",
+      "-before",
+      "+after",
       "",
     ].join("\n");
 
@@ -236,7 +236,7 @@ describe("parseUnifiedDiff", () => {
     expect(file?.path).toBe("café.ts");
   });
 
-  it("splitst CRLF-output net zo goed als LF-output", () => {
+  it("splits CRLF output just as well as LF output", () => {
     const patch =
       [
         "diff --git a/a.txt b/a.txt",
@@ -244,17 +244,17 @@ describe("parseUnifiedDiff", () => {
         "--- a/a.txt",
         "+++ b/a.txt",
         "@@ -1 +1 @@",
-        "-oud",
-        "+nieuw",
+        "-before",
+        "+after",
       ].join("\r\n") + "\r\n";
 
     const [file] = parseUnifiedDiff(patch);
     expect(file?.additions).toBe(1);
     expect(file?.deletions).toBe(1);
-    expect(file?.hunks[0]?.lines[1]?.content).toBe("nieuw");
+    expect(file?.hunks[0]?.lines[1]?.content).toBe("after");
   });
 
-  it("leest meerdere bestanden en meerdere hunks in één patch", () => {
+  it("reads several files and several hunks from one patch", () => {
     const patch = [
       "diff --git a/a.ts b/a.ts",
       "index 1111111..2222222 100644",
@@ -289,7 +289,7 @@ describe("parseUnifiedDiff", () => {
     expect(diff.changedLines).toBe(5);
   });
 
-  it("geeft een lege lijst voor een lege diff", () => {
+  it("returns an empty list for an empty diff", () => {
     expect(parseUnifiedDiff("")).toEqual([]);
     expect(buildDiff("staged", [])).toEqual({
       scope: "staged",

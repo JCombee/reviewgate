@@ -19,12 +19,12 @@ const COLOR: Readonly<Record<FileStatus, string>> = {
 };
 
 const TITLE: Readonly<Record<FileStatus, string>> = {
-  added: "toegevoegd",
-  deleted: "verwijderd",
-  modified: "gewijzigd",
-  renamed: "hernoemd",
-  copied: "gekopieerd",
-  mode_changed: "modus gewijzigd",
+  added: "added",
+  deleted: "deleted",
+  modified: "modified",
+  renamed: "renamed",
+  copied: "copied",
+  mode_changed: "mode changed",
 };
 
 export function StatusBadge({ status }: { status: FileStatus }) {

@@ -8,13 +8,13 @@ import { EMPTY_TREE, type DiffOptions, type GitClient, type RepoInfo } from "./G
 
 const DEFAULT_CONTEXT = 5;
 
-/** Concrete `GitClient` bovenop de git-CLI. */
+/** A concrete `GitClient` on top of the git CLI. */
 export class NodeGitClient implements GitClient {
   #info: RepoInfo | null = null;
 
   constructor(readonly cwd: string) {}
 
-  /** Zoekt de repo-root vanaf een willekeurige directory binnen de repo. */
+  /** Finds the repo root starting from any directory inside the repo. */
   static async open(cwd: string): Promise<NodeGitClient> {
     const { stdout } = await runGit(["rev-parse", "--show-toplevel"], { cwd });
     const root = path.resolve(stdout.trim());
@@ -87,7 +87,7 @@ export class NodeGitClient implements GitClient {
 
     const rev =
       side === "new"
-        ? ":" // de index
+        ? ":" // the index
         : scope === "amend"
           ? info.hasHead
             ? "HEAD~1:"
@@ -111,8 +111,8 @@ export class NodeGitClient implements GitClient {
 
     const paths: string[] = [];
     for (const entry of splitNul(stdout)) {
-      // Formaat: "XY <pad>". Alleen "??" is untracked; renames hebben een tweede
-      // NUL-veld, maar die vallen hier niet onder "??".
+      // Format: "XY <path>". Only "??" is untracked; renames carry a second NUL
+      // field, but those do not fall under "??".
       if (entry.startsWith("?? ")) paths.push(toPosix(entry.slice(3)));
     }
 
@@ -145,8 +145,8 @@ export class NodeGitClient implements GitClient {
           ? [...base, "--cached"]
           : [...base, "--cached", EMPTY_TREE];
       case "working":
-        // `git diff HEAD` = index + working tree samen tegen HEAD, precies de
-        // scope die hoort bij `git add -A && git commit` (§2).
+        // `git diff HEAD` = index plus working tree against HEAD, exactly the scope
+        // that belongs to `git add -A && git commit` (§2).
         return info.hasHead ? [...base, "HEAD"] : [...base, "--cached", EMPTY_TREE];
       case "amend":
         return info.hasHead
@@ -154,13 +154,13 @@ export class NodeGitClient implements GitClient {
           : [...base, "--cached", EMPTY_TREE];
       case "range": {
         const range = opts.range;
-        if (!range) throw new Error('scope "range" vereist een opts.range');
+        if (!range) throw new Error('scope "range" requires opts.range');
         return [...base, range];
       }
     }
   }
 
-  /** HEAD~1, of de lege boom als HEAD de allereerste commit is. */
+  /** HEAD~1, or the empty tree if HEAD is the very first commit. */
   async #amendBase(): Promise<string> {
     const res = await runGit(["rev-parse", "--verify", "--quiet", "HEAD~1"], {
       cwd: this.cwd,
@@ -170,9 +170,9 @@ export class NodeGitClient implements GitClient {
   }
 
   /**
-   * Untracked bestand als "added" entry. `--no-index` levert dezelfde patchvorm als
-   * een gewone diff, dus de parser hoeft geen apart geval te kennen. Exitcode 1
-   * betekent hier "er zijn verschillen", niet "fout".
+   * An untracked file as an "added" entry. `--no-index` produces the same patch shape
+   * as an ordinary diff, so the parser needs no separate case. Exit code 1 here means
+   * "there are differences", not "failure".
    */
   async #untrackedAsDiffFile(relPosix: string, context: number): Promise<DiffFile | null> {
     const info = await this.info();
@@ -218,7 +218,7 @@ export class NodeGitClient implements GitClient {
         await fs.access(path.join(gitDir, name));
         return true;
       } catch {
-        // niet aanwezig
+        // not present
       }
     }
     return false;

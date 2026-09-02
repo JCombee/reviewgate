@@ -4,13 +4,13 @@ import path from "node:path";
 export interface ServerRecord {
   port: number;
   pid: number;
-  /** Beheerstoken voor `POST /api/sessions`; alleen de lokale CLI kent dit. */
+  /** Admin token for `POST /api/sessions`; only the local CLI knows it. */
   serverToken: string;
   startedAt: string;
   version: string;
 }
 
-/** `.git/reviewgate` — buiten versiebeheer, per repo (§4). */
+/** `.git/reviewgate` — outside version control, one per repo (§4). */
 export function stateDir(gitDir: string): string {
   return path.join(gitDir, "reviewgate");
 }
@@ -44,8 +44,8 @@ export async function removeServerRecord(gitDir: string): Promise<void> {
 }
 
 /**
- * Draait dit pid nog? `process.kill(pid, 0)` doet geen signaal maar alleen een
- * bestaanscheck, en werkt zo op macOS, Linux én Windows (§4).
+ * Is this pid still running? `process.kill(pid, 0)` sends no signal, it only checks
+ * for existence, and so works on macOS, Linux and Windows alike (§4).
  */
 export function isAlive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
@@ -53,7 +53,7 @@ export function isAlive(pid: number): boolean {
     process.kill(pid, 0);
     return true;
   } catch (err) {
-    // EPERM betekent: het proces bestaat, maar is niet van ons.
+    // EPERM means: the process exists, but it is not ours.
     return (err as NodeJS.ErrnoException).code === "EPERM";
   }
 }

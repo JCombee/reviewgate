@@ -2,7 +2,7 @@ import type { HighlightLine, PaletteEntry } from "@reviewgate/core/api";
 import { describe, expect, it } from "vitest";
 import { linesFromTokens, toPieces } from "./code.js";
 
-/** Palet zoals de server het meestuurt: [licht, donker] per index. */
+/** The palette the way the server sends it: [light, dark] per index. */
 const palette: PaletteEntry[] = [
   ["#333", "#ccc"],
   ["#00f", "#88f"],
@@ -12,13 +12,13 @@ const palette: PaletteEntry[] = [
 const tok = (t: string, c = 0) => ({ t, c });
 
 describe("toPieces", () => {
-  it("valt terug op platte tekst zonder tokens", () => {
+  it("falls back to plain text without tokens", () => {
     expect(toPieces("const a = 1;", null, palette)).toEqual([
       { text: "const a = 1;", light: "", dark: "", changed: false },
     ]);
   });
 
-  it("zoekt de kleuren op in het palet", () => {
+  it("looks the colours up in the palette", () => {
     const tokens: HighlightLine = [tok("const", 1), tok(" a", 0)];
     const pieces = toPieces("const a", tokens, palette);
     expect(pieces.map((p) => [p.text, p.light, p.dark, p.changed])).toEqual([
@@ -27,13 +27,13 @@ describe("toPieces", () => {
     ]);
   });
 
-  it("geeft lege kleuren bij een onbekende palet-index", () => {
+  it("gives empty colours for an unknown palette index", () => {
     const pieces = toPieces("x", [tok("x", 99)], palette);
     expect(pieces[0]).toMatchObject({ light: "", dark: "" });
   });
 
-  it("knipt een token op de segmentgrens", () => {
-    // "const a = 22;" met alleen "22" gewijzigd, terwijl shiki "22;" als één token ziet.
+  it("cuts a token at the segment boundary", () => {
+    // "const a = 22;" with only "22" changed, while shiki sees "22;" as one token.
     const tokens: HighlightLine = [tok("const a = ", 0), tok("22;", 2)];
     const pieces = toPieces("const a = 22;", tokens, palette, [{ start: 10, end: 12 }]);
     expect(pieces.map((p) => [p.text, p.changed])).toEqual([
@@ -44,7 +44,7 @@ describe("toPieces", () => {
     expect(pieces[1]?.light).toBe("#e50");
   });
 
-  it("markeert een segment dat meerdere tokens beslaat", () => {
+  it("marks a segment that spans several tokens", () => {
     const tokens: HighlightLine = [tok("foo"), tok("("), tok("a"), tok(")")];
     const pieces = toPieces("foo(a)", tokens, palette, [{ start: 3, end: 6 }]);
     expect(pieces.map((p) => [p.text, p.changed])).toEqual([
@@ -55,7 +55,7 @@ describe("toPieces", () => {
     ]);
   });
 
-  it("werkt ook zonder tokens", () => {
+  it("works without tokens too", () => {
     const pieces = toPieces("abcdef", null, palette, [{ start: 2, end: 4 }]);
     expect(pieces.map((p) => [p.text, p.changed])).toEqual([
       ["ab", false],
@@ -64,19 +64,19 @@ describe("toPieces", () => {
     ]);
   });
 
-  it("laat lege stukken weg", () => {
+  it("leaves empty pieces out", () => {
     const tokens: HighlightLine = [tok(""), tok("x")];
     expect(toPieces("x", tokens, palette)).toHaveLength(1);
   });
 });
 
 describe("linesFromTokens", () => {
-  it("plakt de tokens per regel weer aan elkaar", () => {
+  it("glues the tokens of each line back together", () => {
     const lines: HighlightLine[] = [[tok("const "), tok("a")], [tok("")], [tok("b")]];
     expect(linesFromTokens(lines)).toEqual(["const a", "", "b"]);
   });
 
-  it("geeft null door", () => {
+  it("passes null through", () => {
     expect(linesFromTokens(null)).toBeNull();
   });
 });
