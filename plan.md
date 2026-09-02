@@ -142,7 +142,7 @@ a second invocation in the same repo reuses the running server. Port: ephemeral,
 
 ## 4. Repo layout and stack
 
-Node plus TypeScript, pnpm workspaces. One npm package bundling everything, plus a separate
+Node plus TypeScript, npm workspaces. One npm package bundling everything, plus a separate
 plugin directory for the Claude Code side.
 
 ```

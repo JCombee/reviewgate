@@ -387,7 +387,7 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     const dist = await findWebDist();
     if (!dist) {
       return c.text(
-        "The web UI has not been built. Run `pnpm --filter @reviewgate/web build`.",
+        "The web UI has not been built. Run `npm run build:web`.",
         503,
       );
     }

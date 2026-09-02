@@ -28,12 +28,76 @@ A `deny` from a PreToolUse hook holds in *every* permission mode, including unde
 
 ## Installation
 
+One command per platform. It clones the repo, builds it with npm, and installs the
+plugin into Claude Code. Requires Node.js 20 or newer, npm and git.
+
+**macOS and Linux**
+
 ```bash
-pnpm install
-pnpm build
+curl -fsSL https://raw.githubusercontent.com/JCombee/reviewgate/main/scripts/install.sh | bash
 ```
 
-Then switch the hook on. In a project with the plugin:
+**Windows (PowerShell)**
+
+```powershell
+irm https://raw.githubusercontent.com/JCombee/reviewgate/main/scripts/install.ps1 | iex
+```
+
+Restart Claude Code afterwards so it picks up the hook. Options and what the script
+touches: [`scripts/README.md`](scripts/README.md).
+
+### By hand
+
+ReviewGate ships as a Claude Code plugin. This repo is also its marketplace, so
+installing takes two commands inside Claude Code:
+
+```
+/plugin marketplace add JCombee/reviewgate
+/plugin install reviewgate@reviewgate
+```
+
+The plugin brings its own `PreToolUse` hook (`plugin/hooks/hooks.json`), the `/review`
+command and the `reviewgate` skill. No hand-editing of `settings.json`.
+
+The hook wrapper needs the built CLI. Clone the repo once and build it:
+
+```bash
+git clone git@github.com:JCombee/reviewgate.git
+cd reviewgate
+npm install
+npm run build
+```
+
+The wrapper looks for the CLI in this order: `$REVIEWGATE_CLI`, next to the plugin in a
+monorepo checkout, `plugin/node_modules/@reviewgate/cli`, then
+`node_modules/@reviewgate/cli` in the project you are working in. If the plugin lives
+somewhere other than your checkout, point it at the build explicitly:
+
+```bash
+export REVIEWGATE_CLI=/path/to/reviewgate/packages/cli/bin/reviewgate.mjs
+```
+
+If it finds nothing, the hook exits 0 and stays out of the way: a broken gate must
+never block the work, only fail to review it.
+
+For the `reviewgate` command in your own shell, link the CLI:
+
+```bash
+npm link --workspace @reviewgate/cli
+```
+
+### Installing from a local checkout
+
+Instead of the GitHub source, point the marketplace at the clone:
+
+```
+/plugin marketplace add /path/to/reviewgate
+/plugin install reviewgate@reviewgate
+```
+
+### Without the plugin
+
+Wiring the hook by hand works too. In a project's `.claude/settings.json`:
 
 ```json
 {
@@ -120,7 +184,7 @@ reviewgate hook             PreToolUse hook: reads hook JSON from stdin and bloc
 {
   "timeoutMs": 3300000,
   "minLines": 0,
-  "ignore": ["pnpm-lock.yaml", "dist/**", "**/*.min.js"],
+  "ignore": ["package-lock.json", "dist/**", "**/*.min.js"],
   "autoOpen": true,
   "autoReview": { "perLines": 25, "min": 2, "max": 20 },
   "dedupe": { "overlapping": 0.6, "anywhere": 0.8 },
@@ -166,10 +230,10 @@ Everything under `.git/reviewgate/`, a path that is already outside version cont
 ## Development
 
 ```bash
-pnpm build          # core, server, cli and the web bundle
-pnpm test           # vitest: unit and integration
-pnpm test:e2e       # playwright: happy path and approve path
-pnpm typecheck
+npm run build      # core, server, cli and the web bundle
+npm test           # vitest: unit and integration
+npm run test:e2e   # playwright: happy path and approve path
+npm run typecheck
 ```
 
 The hook can be tested on its own, without Claude Code:

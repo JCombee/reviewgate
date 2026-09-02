@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@reviewgate/core": "workspace:*",
+    "@reviewgate/core": "*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
