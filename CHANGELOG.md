@@ -10,6 +10,10 @@ Entries describe what changed for someone using the gate, not which files moved.
 
 ### Fixed
 
+- Approving took about 25 seconds to reach the commit. The verdict was on stdout at
+  once, but the open review page kept a heartbeat timer pending in the hook's process,
+  and Claude Code waits for that process to end. Approve now lands in a fraction of a
+  second.
 - The Windows installer read the published checksum as a byte array instead of text,
   so a perfectly good download failed on a checksum mismatch.
 - Both installers hid the output of the plugin step, which turned a failed clone into

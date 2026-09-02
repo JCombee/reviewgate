@@ -11,3 +11,5 @@ test-results/
 playwright-report/
 # The compiled binaries; anchored, so it does not swallow .claude/skills/release/.
 /release/
+# Bun keeps its cross-compile downloads here.
+.bun-cache/

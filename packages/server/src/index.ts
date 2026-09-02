@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import type { Socket } from "node:net";
 import { serve, type ServerType } from "@hono/node-server";
 import { NodeGitClient, VERSION as CORE_VERSION } from "@reviewgate/core";
 import { createApp, SessionStore, type CreateSessionBody } from "./app.js";
@@ -44,6 +45,15 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     );
   });
 
+  // Every socket, tracked by hand. `closeAllConnections()` is a Node addition that a
+  // different runtime need not have — under the compiled binary it is simply absent —
+  // and without it a browser holding an SSE stream keeps the hook's process alive.
+  const sockets = new Set<Socket>();
+  server.on("connection", (socket: Socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+  });
+
   const address = server.address();
   const port = typeof address === "object" && address !== null ? address.port : 0;
 
@@ -70,6 +80,8 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     };
     node.closeIdleConnections?.();
     node.closeAllConnections?.();
+    for (const socket of sockets) socket.destroy();
+    sockets.clear();
 
     await Promise.race([
       new Promise<void>((resolve) => server.close(() => resolve())),

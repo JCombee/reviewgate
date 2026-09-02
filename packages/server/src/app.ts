@@ -360,10 +360,16 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
       while (running) {
         if (queue.length === 0) {
           // Wait for the next mutation, or for a heartbeat so a dead connection
-          // does not hang around forever.
+          // does not hang around forever. The timer is unref'd and cleared on wake:
+          // the hook runs this server in its own process, and a pending 25s timer
+          // would keep that process alive long after the verdict was printed.
           await new Promise<void>((resolve) => {
-            wake = resolve;
-            setTimeout(resolve, 25_000);
+            const timer = setTimeout(resolve, 25_000);
+            timer.unref?.();
+            wake = () => {
+              clearTimeout(timer);
+              resolve();
+            };
           });
           wake = null;
           if (!running) break;

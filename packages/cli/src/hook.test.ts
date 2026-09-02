@@ -227,6 +227,42 @@ describe("hook — blocking", () => {
     expect(out.systemMessage).toContain("the shape holds");
   }, 60_000);
 
+  /**
+   * The real case always has a browser attached, and that browser holds an SSE stream
+   * open. The verdict is on stdout long before the process ends, and Claude Code waits
+   * for the process — so a socket or a heartbeat timer that outlives the review shows
+   * up as a commit that hangs for half a minute after you clicked Approve.
+   */
+  it("ends promptly after approve while the review page is watching", async () => {
+    await stageChange();
+    const hook = runHook('git commit -m "fix: something"');
+    await waitForReview();
+
+    const record = await readServerRecord(path.join(repo.root, ".git"));
+    if (!record) throw new Error("no server.json");
+    const watcher = await sessionIdOf(record.port, record.serverToken);
+    const events = await fetch(
+      `http://127.0.0.1:${record.port}/api/review/${watcher.id}/events?token=${watcher.token}`,
+    );
+    expect(events.ok).toBe(true);
+
+    // Read the first frame, so the stream is really open. The next read sits on the
+    // heartbeat.
+    const reader = events.body!.getReader();
+    await reader.read();
+
+    await decide("approve");
+    const started = Date.now();
+    const { stdout } = await hook.done;
+    const elapsed = Date.now() - started;
+
+    const out = JSON.parse(stdout) as HookOutput;
+    expect(out.hookSpecificOutput?.permissionDecision).toBe("allow");
+    expect(elapsed).toBeLessThan(10_000);
+
+    await reader.cancel().catch(() => {});
+  }, 60_000);
+
   it("lets a second attempt on the same diff straight through via the artifact", async () => {
     await stageChange();
     const hook = runHook('git commit -m "fix: something"');
