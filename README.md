@@ -28,9 +28,9 @@ A `deny` from a PreToolUse hook holds in *every* permission mode, including unde
 
 ## Installation
 
-One command. It downloads a single self-contained binary, checks its SHA-256 and
-installs the Claude Code plugin. Nothing else has to be on the machine: no Node, no
-npm, no checkout.
+One command. It downloads a single self-contained binary, verifies its SHA-256, puts
+it on your PATH and installs the Claude Code plugin. Nothing else has to be on the
+machine: no Node, no npm, no checkout.
 
 **macOS and Linux**
 
@@ -44,10 +44,39 @@ curl -fsSL https://raw.githubusercontent.com/JCombee/reviewgate/main/scripts/ins
 irm https://raw.githubusercontent.com/JCombee/reviewgate/main/scripts/install.ps1 | iex
 ```
 
-Restart Claude Code afterwards so it picks up the hook. The binary lands in
-`~/.local/bin` (macOS, Linux) or `%LOCALAPPDATA%\Programs\reviewgate` (Windows), which
-the installer puts on your PATH. Options and what the script touches:
+Restart Claude Code afterwards so it picks up the hook, and open a new terminal if the
+installer says it changed your PATH. Then check it landed:
+
+```bash
+reviewgate --version
+```
+
+The binary goes to `~/.local/bin` on macOS and Linux — the script prints the line to
+add if that is not on your PATH, and never edits a shell profile behind your back. On
+Windows it goes to `%LOCALAPPDATA%\Programs\reviewgate` and the script does extend your
+user PATH, because nothing else there would.
+
+Flags, environment variables and the full list of what the script touches are in
 [`scripts/README.md`](scripts/README.md).
+
+### Platforms
+
+| Platform | Asset |
+| --- | --- |
+| macOS, Apple silicon | `reviewgate-darwin-arm64` |
+| macOS, Intel | `reviewgate-darwin-x64` |
+| Linux, x86-64 | `reviewgate-linux-x64` |
+| Linux, arm64 | `reviewgate-linux-arm64` |
+| Windows, x86-64 | `reviewgate-win32-x64.exe` |
+
+Windows on ARM gets the x64 binary and runs it under emulation. Every asset is
+published with a `.sha256` beside it on the
+[releases page](https://github.com/JCombee/reviewgate/releases), which both installers
+check before they put anything in place.
+
+The binaries are not code-signed. `curl` and `Invoke-WebRequest` do not set the
+quarantine flag, so the gate runs straight after the install script; a binary you
+download by hand through a browser will need Gatekeeper's approval on macOS.
 
 ## Updating
 
@@ -61,8 +90,16 @@ The updater resolves the newest release, verifies the checksum and only then swa
 binary — a failed download leaves the working install untouched. Rerunning the install
 script does the same thing.
 
-The plugin itself is managed by Claude Code. After a release that changes the commands
-or the hook, run `/plugin marketplace update` once so it refreshes.
+The plugin itself is managed by Claude Code, separately from the binary. After a
+release that changes the commands or the hook:
+
+```bash
+claude plugin marketplace update reviewgate
+claude plugin update reviewgate@reviewgate
+```
+
+Restart Claude Code to apply it. Most releases change only the binary, which
+`reviewgate update` covers on its own.
 
 ## Installing without the script
 
@@ -87,6 +124,22 @@ npm link --workspace @reviewgate/cli
 
 Both give the same `reviewgate hook` command, so the plugin does not care which one
 you have.
+
+### Uninstalling
+
+Remove the plugin, then delete the binary:
+
+```bash
+claude plugin uninstall reviewgate@reviewgate
+rm ~/.local/bin/reviewgate                                    # macOS, Linux
+```
+
+```powershell
+Remove-Item "$env:LOCALAPPDATA\Programs\reviewgate" -Recurse  # Windows
+```
+
+Reviews live in `.git/reviewgate/` of each repo and go with the repo, not with the
+install.
 
 ## Recommended project settings
 
