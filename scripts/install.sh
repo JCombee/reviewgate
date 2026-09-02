@@ -127,8 +127,17 @@ esac
 if [ "$WITH_PLUGIN" -eq 1 ]; then
   if command -v claude >/dev/null 2>&1; then
     say "Installing the Claude Code plugin"
-    claude plugin marketplace add "$REPO" 2>/dev/null || claude plugin marketplace update reviewgate || true
-    claude plugin install reviewgate@reviewgate || warn "could not install the plugin; do it from Claude Code."
+    # `add` fails when the marketplace is already there, which an update fixes. Both
+    # keep their output: a clone that fails on the network reads as a mystery
+    # otherwise, and that is exactly the case worth seeing.
+    if ! claude plugin marketplace add "$REPO"; then
+      claude plugin marketplace update reviewgate || true
+    fi
+    if ! claude plugin install reviewgate@reviewgate; then
+      warn "could not install the plugin. Run this inside Claude Code:"
+      echo "  /plugin marketplace add ${REPO}"
+      echo "  /plugin install reviewgate@reviewgate"
+    fi
   else
     cat <<MSG
 

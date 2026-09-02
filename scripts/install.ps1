@@ -138,7 +138,11 @@ if (-not $NoPlugin) {
     claude plugin marketplace add $Repo
     if ($LASTEXITCODE -ne 0) { claude plugin marketplace update reviewgate }
     claude plugin install reviewgate@reviewgate
-    if ($LASTEXITCODE -ne 0) { Warn "could not install the plugin; do it from Claude Code." }
+    if ($LASTEXITCODE -ne 0) {
+      Warn "could not install the plugin. Run this inside Claude Code:"
+      Write-Host "  /plugin marketplace add $Repo"
+      Write-Host "  /plugin install reviewgate@reviewgate"
+    }
   } else {
     Write-Host ""
     Write-Host "The 'claude' CLI is not on your PATH. Run these inside Claude Code instead:"
