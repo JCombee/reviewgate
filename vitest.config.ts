@@ -1,6 +1,20 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
+const src = (pkg: string) =>
+  fileURLToPath(new URL(`./packages/${pkg}/src/index.ts`, import.meta.url));
+
 export default defineConfig({
+  resolve: {
+    // The workspace packages point at their tsc output, which a fresh checkout does
+    // not have yet. Tests read the source instead, so `npm test` works before
+    // `npm run build` and never runs against a stale dist.
+    alias: {
+      "@reviewgate/core/api": fileURLToPath(new URL("./packages/core/src/api.ts", import.meta.url)),
+      "@reviewgate/core": src("core"),
+      "@reviewgate/server": src("server"),
+    },
+  },
   test: {
     include: ["packages/*/src/**/*.test.ts"],
     // The Playwright specs in e2e/ have their own runner.

@@ -50,11 +50,13 @@ jobs:
 
       - run: npm ci
 
+      # Some tests spawn the built CLI, so the build comes first. It also means a
+      # broken build fails here rather than halfway through the compile.
+      - name: Build
+        run: npm run build
+
       - name: Test
         run: npm test
-
-      - name: Build the web UI
-        run: npm run build:web
 
       - name: Compile the binaries
         run: node scripts/build-binaries.mjs --version "${{ steps.version.outputs.version }}" --out release
