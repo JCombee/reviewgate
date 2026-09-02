@@ -9,4 +9,5 @@ coverage/
 /*.png
 test-results/
 playwright-report/
-release/
+# The compiled binaries; anchored, so it does not swallow .claude/skills/release/.
+/release/

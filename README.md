@@ -276,16 +276,19 @@ node scripts/build-binaries.mjs --version 0.2.0     # all targets, into release/
 node scripts/build-binaries.mjs --target bun-linux-x64
 ```
 
-Cutting a release: bump `version` in `package.json` (the workflow refuses a tag that
-disagrees with it), commit, then push the tag.
+Cutting a release is a skill: ask Claude Code to `/release`, or follow
+[`.claude/skills/release/SKILL.md`](.claude/skills/release/SKILL.md) by hand. It writes
+the [CHANGELOG](CHANGELOG.md) section first, bumps every manifest, verifies the build,
+commits, and only then tags:
 
 ```bash
-git tag v0.2.0 && git push origin v0.2.0
+git tag -a v0.2.0 -m "v0.2.0 — ..." && git push origin v0.2.0
 ```
 
-`.github/workflows/release.yml` runs the tests, compiles the five targets, writes a
-`.sha256` next to each one and publishes them as a GitHub release. That release is
-what the installer and `reviewgate update` read.
+`.github/workflows/release.yml` refuses a tag whose version disagrees with any
+manifest or which the CHANGELOG has never heard of. Past that it runs the tests,
+compiles the five targets, writes a `.sha256` next to each one and publishes them as a
+GitHub release. That release is what the installer and `reviewgate update` read.
 
 ## Limits
 

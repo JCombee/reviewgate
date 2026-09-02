@@ -40,13 +40,37 @@ jobs:
       # The tag is the single source of truth for what a binary says it is. A
       # package.json left behind on an older version would ship a binary that lies
       # about itself to the update check, so fail here instead.
-      - name: Check package.json matches the tag
+      - name: Check the manifests match the tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          pkg="$(node -p "require('./package.json').version")"
-          if [ "$pkg" != "${{ steps.version.outputs.version }}" ]; then
-            echo "package.json is $pkg but the tag is ${{ steps.version.outputs.version }}" >&2
-            exit 1
+          fail=0
+          for manifest in package.json packages/*/package.json plugin/.claude-plugin/plugin.json; do
+            # A missing manifest (a rename, or a glob that matched nothing and came
+            # through literally) must report itself and let the loop finish, not kill
+            # the step on a node stack trace under `bash -e`.
+            if [ ! -f "$manifest" ]; then
+              echo "missing $manifest" >&2
+              fail=1
+              continue
+            fi
+            if ! found="$(node -p "require('./$manifest').version")"; then
+              echo "could not read a version from $manifest" >&2
+              fail=1
+              continue
+            fi
+            if [ "$found" != "$VERSION" ]; then
+              echo "$manifest is $found but the tag is $VERSION" >&2
+              fail=1
+            fi
+          done
+          # A CHANGELOG that never learned about this version is a release nobody can
+          # read; the .claude/skills/release skill writes that section before tagging.
+          if ! grep -q "^## \[${VERSION}\]" CHANGELOG.md; then
+            echo "CHANGELOG.md has no section for ${VERSION}" >&2
+            fail=1
           fi
+          exit $fail
 
       - run: npm ci
 
