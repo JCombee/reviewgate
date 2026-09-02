@@ -5,6 +5,7 @@ import {
   diffHash,
   intralineDiff,
   addSuggestions,
+  loadConfig,
   closeOpenSuggestions,
   openComments,
   reanchorComments,
@@ -16,6 +17,7 @@ import {
   type Diff,
   type DiffOptions,
   type FileLines,
+  type ReviewGateConfig,
   type GitClient,
   type Review,
   type ReviewScope,
@@ -69,6 +71,7 @@ export class Session {
     readonly repoRoot: string,
     readonly highlighting: Highlighting,
     readonly store: ReviewStore,
+    readonly config: ReviewGateConfig,
     review: Review,
   ) {
     this.#review = review;
@@ -82,6 +85,7 @@ export class Session {
     ]);
 
     const store = new ReviewStore(info.gitDir);
+    const config = await loadConfig(info.root);
     const { review, newRound } = await store.findOrCreate({
       repoRoot: info.root,
       branch: info.branch,
@@ -107,6 +111,7 @@ export class Session {
       info.root,
       highlighting,
       store,
+      config,
       anchored,
     );
     session.#agent = new ReviewAgent({
@@ -256,9 +261,12 @@ export class Session {
 
     this.#setPassStatus({ state: "running" });
     try {
-      const cap = suggestionCap(this.diff.changedLines);
+      const cap = suggestionCap(this.diff.changedLines, this.config.autoReviewCap);
       const findings = await this.#agent.reviewPass(cap, this.#review);
-      const result = addSuggestions(this.#review, findings, { cap });
+      const result = addSuggestions(this.#review, findings, {
+        cap,
+        dedupe: this.config.dedupe,
+      });
 
       await this.#logDedupe(result.duplicates);
       await this.commit(result.review);

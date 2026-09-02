@@ -4,6 +4,9 @@ import {
   analyzeCommand,
   consumeApproval,
   diffHash,
+  isIgnored,
+  loadConfig,
+  parseUnifiedDiff,
   NodeGitClient,
   readApproval,
   renderApproved,
@@ -42,9 +45,6 @@ export interface HookPayload {
 type Verdict =
   | { kind: "allow"; context?: string }
   | { kind: "deny"; reason: string };
-
-/** Standaard blokkeertijd; de hook-timeout in hooks.json staat hier ruim boven. */
-const DEFAULT_TIMEOUT_MS = 55 * 60 * 1000;
 
 export async function cmdHook(cwdFallback: string): Promise<number> {
   const raw = await readStdin();
@@ -101,9 +101,18 @@ async function decide(
   // Midden in een merge, rebase of cherry-pick heeft reviewen geen zin (§12).
   if (info.inMergeOrRebase) return null;
 
+  const config = await loadConfig(info.root);
+
   const options: DiffOptions = { context: 5, includeUntracked: analysis.scope === "working" };
   const patch = await git.rawDiff(analysis.scope, options);
   if (patch.trim() === "") return null;
+
+  // Genegeerde paden en te kleine diffs gaan zonder review door (§2). We tellen op
+  // de geparste diff, zodat lockfiles de telling niet opblazen.
+  const files = parseUnifiedDiff(patch).filter((f) => !isIgnored(f.path, config.ignore));
+  if (files.length === 0) return null;
+  const changedLines = files.reduce((n, f) => n + f.additions + f.deletions, 0);
+  if (changedLines < config.minLines) return null;
 
   const hash = diffHash(patch);
 
@@ -128,11 +137,13 @@ async function decide(
   });
 
   // In tests en op headless machines is de browser niet gewenst of niet aanwezig.
-  if (process.env["REVIEWGATE_NO_OPEN"] !== "1") await openBrowser(session.url);
+  if (config.autoOpen && process.env["REVIEWGATE_NO_OPEN"] !== "1") await openBrowser(session.url);
 
-  const timeoutMs = Number.parseInt(process.env["REVIEWGATE_TIMEOUT_MS"] ?? "", 10);
+  // De omgevingsvariabele wint van de config; die is bedoeld om per aanroep bij te
+  // sturen, bijvoorbeeld in tests.
+  const fromEnv = Number.parseInt(process.env["REVIEWGATE_TIMEOUT_MS"] ?? "", 10);
   const result = await waitForDecision(info.gitDir, session.reviewId, {
-    timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS,
+    timeoutMs: Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : config.timeoutMs,
   });
 
   if (!result) {

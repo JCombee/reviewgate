@@ -1,0 +1,4 @@
+{
+  "ignore": ["pnpm-lock.yaml", "dist/**", "**/*.min.js", "packages/web/dist/**"],
+  "minLines": 0
+}

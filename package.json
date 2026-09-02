@@ -14,7 +14,9 @@
     "clean": "tsc -b --clean packages/core packages/server packages/cli",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b --noEmit packages/core packages/server packages/cli && pnpm --filter @reviewgate/web typecheck"
+    "typecheck": "tsc -b --noEmit packages/core packages/server packages/cli && pnpm --filter @reviewgate/web typecheck",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
+    "test:all": "pnpm run test && pnpm run test:e2e"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

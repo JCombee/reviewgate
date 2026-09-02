@@ -7,3 +7,5 @@ coverage/
 .playwright-mcp/
 # Losse screenshots in de repo-root zijn wegwerpmateriaal; docs/-afbeeldingen niet.
 /*.png
+test-results/
+playwright-report/

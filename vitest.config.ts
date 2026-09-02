@@ -3,6 +3,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["packages/*/src/**/*.test.ts"],
+    // De Playwright-specs in e2e/ hebben hun eigen runner.
+    exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"],
     // Integratietests zetten echte git-repo's op in een tempdir; die zijn traag
     // op Windows, dus ruimer dan de vitest-default van 5s.
     testTimeout: 30_000,

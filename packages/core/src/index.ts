@@ -89,3 +89,6 @@ export type {
 
 export { ANCHOR_WINDOW, reanchorComment, reanchorComments } from "./review/anchor.js";
 export type { AnchorOutcome, AnchorResult, FileLines } from "./review/anchor.js";
+
+export { CONFIG_FILENAME, DEFAULT_CONFIG, isIgnored, loadConfig, matchesPattern, mergeConfig } from "./config.js";
+export type { ReviewGateConfig } from "./config.js";

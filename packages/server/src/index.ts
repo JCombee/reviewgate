@@ -60,7 +60,24 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
   const close = async (): Promise<void> => {
     if (closed) return;
     closed = true;
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+
+    // Een open SSE-stream eindigt uit zichzelf nooit, en `close()` wacht op elke
+    // verbinding. Zonder dit blijft de hook hangen zodra er een browser meekijkt:
+    // het oordeel staat dan al op stdout, maar het proces eindigt niet.
+    const node = server as unknown as {
+      closeIdleConnections?: () => void;
+      closeAllConnections?: () => void;
+    };
+    node.closeIdleConnections?.();
+    node.closeAllConnections?.();
+
+    await Promise.race([
+      new Promise<void>((resolve) => server.close(() => resolve())),
+      // Laatste redmiddel: liever een socket die nog even naijlt dan een hook die
+      // blijft staan.
+      new Promise<void>((resolve) => setTimeout(resolve, 2000).unref()),
+    ]);
+
     const current = await readServerRecord(info.gitDir);
     if (current?.pid === process.pid) await removeServerRecord(info.gitDir);
   };

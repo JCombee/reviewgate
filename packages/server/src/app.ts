@@ -105,7 +105,9 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     store.add(session);
 
     // De automatische pass loopt naast het lezen en blokkeert niets (§9).
-    if (process.env["REVIEWGATE_AUTO_REVIEW"] !== "0") void session.runReviewPass();
+    if (session.config.autoReview && process.env["REVIEWGATE_AUTO_REVIEW"] !== "0") {
+      void session.runReviewPass();
+    }
 
     return c.json({
       id: session.id,

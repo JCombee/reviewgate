@@ -54,7 +54,10 @@ export function CommentForm({
   };
 
   return (
-    <div className="border-y border-[var(--rg-border)] bg-[var(--rg-bg-raised)] px-3 py-2">
+    <div
+      className="border-y border-[var(--rg-border)] bg-[var(--rg-bg-raised)] px-3 py-2"
+      data-comment-form
+    >
       <textarea
         ref={ref}
         value={body}
@@ -62,6 +65,7 @@ export function CommentForm({
         onKeyDown={onKeyDown}
         rows={3}
         placeholder={placeholder}
+        aria-label={placeholder}
         className="w-full resize-y rounded border border-[var(--rg-border)] bg-[var(--rg-bg)] px-2 py-1 font-[family-name:var(--rg-font-ui)]"
       />
       {error && (

@@ -1,0 +1,11 @@
+{
+  "name": "reviewgate",
+  "owner": { "name": "ReviewGate" },
+  "plugins": [
+    {
+      "name": "reviewgate",
+      "source": "./plugin",
+      "description": "Lokale, browser-gebaseerde code review gate die opent zodra Claude Code wil committen."
+    }
+  ]
+}
