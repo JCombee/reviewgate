@@ -1,6 +1,9 @@
 {
   "name": "reviewgate",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "A local, browser-based code review gate that opens as soon as Claude Code wants to commit.",
-  "author": { "name": "ReviewGate" }
+  "author": {
+    "name": "ReviewGate"
+  },
+  "homepage": "https://github.com/JCombee/reviewgate"
 }

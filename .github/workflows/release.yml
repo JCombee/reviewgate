@@ -1,0 +1,94 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Tag to build, e.g. v0.1.0"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Resolve the version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ inputs.version }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      # The tag is the single source of truth for what a binary says it is. A
+      # package.json left behind on an older version would ship a binary that lies
+      # about itself to the update check, so fail here instead.
+      - name: Check package.json matches the tag
+        run: |
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$pkg" != "${{ steps.version.outputs.version }}" ]; then
+            echo "package.json is $pkg but the tag is ${{ steps.version.outputs.version }}" >&2
+            exit 1
+          fi
+
+      - run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build the web UI
+        run: npm run build:web
+
+      - name: Compile the binaries
+        run: node scripts/build-binaries.mjs --version "${{ steps.version.outputs.version }}" --out release
+
+      - name: Checksums
+        run: |
+          cd release
+          ls -la
+          cat *.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: release/
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: binaries
+          path: release
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            release/*

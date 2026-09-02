@@ -155,7 +155,6 @@ reviewgate/
 ├── plugin/             # Claude Code plugin (published along with it)
 │   ├── .claude-plugin/plugin.json
 │   ├── hooks/hooks.json
-│   ├── bin/reviewgate-hook.mjs   # a Node wrapper, not a shell script (§11)
 │   ├── commands/review.md
 │   └── skills/reviewgate/SKILL.md
 ├── e2e/                # Playwright
@@ -650,7 +649,6 @@ ordinary Approve it is simply `allow` and the commit runs.
 plugin/
 ├── .claude-plugin/plugin.json     # this file alone belongs in .claude-plugin/
 ├── hooks/hooks.json
-├── bin/reviewgate-hook.mjs        # a Node wrapper, works on macOS, Linux and Windows
 ├── commands/review.md             # /reviewgate:review — start a manual review
 └── skills/reviewgate/SKILL.md     # tells the agent what the gate is and how to work its feedback
 ```
@@ -666,7 +664,7 @@ plugin/
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/reviewgate-hook.mjs\"",
+            "command": "reviewgate hook",
             "timeout": 3600
           }
         ]
@@ -676,16 +674,20 @@ plugin/
 }
 ```
 
-Always use `${CLAUDE_PLUGIN_ROOT}`, never absolute paths. The wrapper is a Node script, not a shell
-script: the command is started explicitly with `node`, so on Windows it depends neither on a POSIX
-shell nor on the `exec` bit. The script reads the hook JSON from stdin, calls `reviewgate hook` (a
-local install, otherwise `npx`) through `execFile` with an argv array, and on *any* failure exits 0
-without output — a broken gate must never block the work, only fail to review it. Log failures to
+Always use `${CLAUDE_PLUGIN_ROOT}` for files inside the plugin, never absolute paths. The hook itself
+needs no file at all: the command is `reviewgate hook`, so the plugin is a thin wiring layer and the
+binary on the PATH does the work. That binary is the same one on macOS, Linux and Windows, which
+takes both the POSIX shell and the `exec` bit out of the picture — there is no wrapper script, and no
+`.cmd` case.
+
+The hook reads the hook JSON from stdin and on *any* internal failure exits 0 without output — a
+broken gate must never block the work, only fail to review it. Log failures to
 `.git/reviewgate/hook.log`.
 
-The command the wrapper calls is itself platform-dependent as well: on Windows `npx` is called
-`npx.cmd`. Solve that by starting the CLI entry with `node` directly (`node <path>/cli.mjs hook`)
-instead of calling the bin shim, and then there is no `.cmd` case.
+The binary is distributed as a single self-contained executable per platform (`bun build --compile`)
+from GitHub releases, so the end user installs nothing else: no Node, no npm, no checkout. The
+install script and `reviewgate update` both resolve the newest release, verify its SHA-256 and
+replace the binary.
 
 Include in the README as well: put in your project's `CLAUDE.md` that staging and committing must
 be separate commands, and add `--no-verify` to the deny rules.

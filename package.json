@@ -1,6 +1,6 @@
 {
   "name": "reviewgate-monorepo",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -15,7 +15,9 @@
     "test:watch": "vitest",
     "typecheck": "tsc -b --noEmit packages/core packages/server packages/cli && npm run typecheck --workspace @reviewgate/web",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
-    "test:all": "npm run test && npm run test:e2e"
+    "test:all": "npm run test && npm run test:e2e",
+    "build:embed": "node scripts/embed-web.mjs",
+    "build:binaries": "node scripts/build-binaries.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

@@ -18,6 +18,7 @@ export type { DiffOptions, GitClient, RepoInfo } from "./git/GitClient.js";
 export { NodeGitClient } from "./git/NodeGitClient.js";
 
 export { diffHash, normalizePatch } from "./review/hash.js";
+export { REPO, VERSION } from "./version.js";
 export { ReviewStore } from "./review/store.js";
 export {
   addComment,

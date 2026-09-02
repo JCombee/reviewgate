@@ -3,115 +3,148 @@
   ReviewGate installer for Windows.
 
 .DESCRIPTION
-  Clones (or updates) the repo, builds it with npm, registers the marketplace and
-  installs the plugin. Safe to run again: it updates in place.
+  Downloads one self-contained binary from the newest GitHub release, checks its
+  SHA-256 and drops it in %LOCALAPPDATA%\Programs\reviewgate. No Node, no npm, no
+  checkout. Run it again to update; `reviewgate update` does the same from inside
+  the binary.
 
     irm https://raw.githubusercontent.com/JCombee/reviewgate/main/scripts/install.ps1 | iex
 
-.PARAMETER InstallDir
-  Where to keep the checkout. Defaults to $env:USERPROFILE\.reviewgate.
+.PARAMETER Version
+  Install exactly this tag instead of the newest release.
 
-.PARAMETER Ref
-  Branch or tag to install. Defaults to main.
+.PARAMETER InstallDir
+  Install somewhere other than %LOCALAPPDATA%\Programs\reviewgate.
+
+.PARAMETER NoPlugin
+  Only place the binary; leave Claude Code alone.
 #>
 [CmdletBinding()]
 param(
-  [string]$InstallDir = $(if ($env:REVIEWGATE_HOME) { $env:REVIEWGATE_HOME } else { Join-Path $env:USERPROFILE ".reviewgate" }),
-  [string]$Ref = $(if ($env:REVIEWGATE_REF) { $env:REVIEWGATE_REF } else { "main" }),
-  [string]$RepoUrl = $(if ($env:REVIEWGATE_REPO) { $env:REVIEWGATE_REPO } else { "https://github.com/JCombee/reviewgate.git" })
+  [string]$Version = $(if ($env:REVIEWGATE_VERSION) { $env:REVIEWGATE_VERSION } else { "latest" }),
+  [string]$InstallDir = $(if ($env:REVIEWGATE_INSTALL_DIR) { $env:REVIEWGATE_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "Programs\reviewgate" }),
+  [string]$Repo = $(if ($env:REVIEWGATE_REPO) { $env:REVIEWGATE_REPO } else { "JCombee/reviewgate" }),
+  [switch]$NoPlugin
 )
 
 $ErrorActionPreference = "Stop"
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-function Say([string]$msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
-function Die([string]$msg) { Write-Host "error: $msg" -ForegroundColor Red; exit 1 }
-function Have([string]$name) { $null -ne (Get-Command $name -ErrorAction SilentlyContinue) }
+function Say([string]$m)  { Write-Host "==> $m" -ForegroundColor Cyan }
+function Warn([string]$m) { Write-Host "warning: $m" -ForegroundColor Yellow }
+function Die([string]$m)  { Write-Host "error: $m" -ForegroundColor Red; exit 1 }
+function Have([string]$n) { $null -ne (Get-Command $n -ErrorAction SilentlyContinue) }
 
-# --- requirements ------------------------------------------------------------
+# --- which binary ------------------------------------------------------------
 
-if (-not (Have "git"))  { Die "git not found. Install git and run again: https://git-scm.com" }
-if (-not (Have "node")) { Die "node not found. Install Node.js 20 or newer: https://nodejs.org" }
-if (-not (Have "npm"))  { Die "npm not found. It ships with Node.js: https://nodejs.org" }
-
-$nodeMajor = [int](node -p "process.versions.node.split('.')[0]")
-if ($nodeMajor -lt 20) { Die "Node.js 20 or newer required, found $(node -v)." }
-
-# --- the checkout ------------------------------------------------------------
-#
-# Running the file from a clone uses that clone; piped through iex there is no script
-# path, so fall back to $InstallDir.
-
-$srcDir = $null
-if ($PSCommandPath) {
-  $candidate = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
-  $manifest = Join-Path $candidate "package.json"
-  if ((Test-Path $manifest) -and ((Get-Content $manifest -Raw) -match '"reviewgate-monorepo"')) {
-    $srcDir = $candidate
-  }
+$arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" }
+if ($arch -eq "arm64") {
+  # The x64 build runs under emulation on ARM64 Windows; there is no separate ARM64
+  # asset yet, and a working binary beats a missing one.
+  $arch = "x64"
 }
+$asset = "reviewgate-win32-$arch.exe"
 
-if (-not $srcDir) {
-  if (Test-Path (Join-Path $InstallDir ".git")) {
-    Say "Updating $InstallDir"
-    git -C $InstallDir fetch --depth 1 origin $Ref
-    if (-not $?) { Die "git fetch failed." }
-    git -C $InstallDir checkout -q FETCH_HEAD
-  } else {
-    Say "Cloning into $InstallDir"
-    if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir }
-    git clone --depth 1 --branch $Ref $RepoUrl $InstallDir
-    if (-not $?) { Die "git clone failed." }
+# --- which release -----------------------------------------------------------
+
+$headers = @{ "User-Agent" = "reviewgate-install" }
+$token = if ($env:GITHUB_TOKEN) { $env:GITHUB_TOKEN } elseif ($env:GH_TOKEN) { $env:GH_TOKEN } else { $null }
+if (-not $token -and (Have "gh")) {
+  $token = (gh auth token --hostname github.com 2>$null)
+  if (-not $token) { $token = $null }
+}
+if ($token) { $headers["Authorization"] = "Bearer $($token.Trim())" }
+
+if ($Version -eq "latest") {
+  Say "Looking up the newest release"
+  $api = "https://api.github.com/repos/$Repo/releases/latest"
+  try {
+    $release = Invoke-RestMethod -Uri $api -Headers $headers
+  } catch {
+    # A stale token gets a 401 where an anonymous request would have worked.
+    try {
+      $release = Invoke-RestMethod -Uri $api -Headers @{ "User-Agent" = "reviewgate-install" }
+    } catch {
+      Die "could not read the releases of $Repo. $($_.Exception.Message)"
+    }
   }
-  $srcDir = $InstallDir
+  $tag = $release.tag_name
+  if (-not $tag) { Die "$Repo has no releases yet." }
 } else {
-  Say "Using the checkout at $srcDir"
+  $tag = if ($Version.StartsWith("v")) { $Version } else { "v$Version" }
 }
 
-# --- build -------------------------------------------------------------------
+# --- download and verify -----------------------------------------------------
 
-Push-Location $srcDir
+$url = "https://github.com/$Repo/releases/download/$tag/$asset"
+$tmp = Join-Path ([IO.Path]::GetTempPath()) ("reviewgate-" + [guid]::NewGuid().ToString("N") + ".exe")
+
+Say "Downloading $asset $tag"
 try {
-  Say "Installing dependencies"
-  npm install --no-audit --no-fund
-  if ($LASTEXITCODE -ne 0) { Die "npm install failed." }
-
-  Say "Building"
-  npm run build
-  if ($LASTEXITCODE -ne 0) { Die "npm run build failed." }
-} finally {
-  Pop-Location
+  Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing -Headers @{ "User-Agent" = "reviewgate-install" }
+} catch {
+  Die "$tag has no $asset. $($_.Exception.Message)"
+}
+try {
+  $expected = (Invoke-WebRequest -Uri "$url.sha256" -UseBasicParsing -Headers @{ "User-Agent" = "reviewgate-install" }).Content
+} catch {
+  Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+  Die "no checksum published for $asset."
 }
 
-$cli = Join-Path $srcDir "packages\cli\bin\reviewgate.mjs"
-if (-not (Test-Path $cli)) { Die "Build finished but $cli is missing." }
+$expectedHash = ($expected -split '\s+')[0]
+$actualHash = (Get-FileHash -Path $tmp -Algorithm SHA256).Hash
+if ($actualHash -ine $expectedHash) {
+  Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+  Die "checksum mismatch - refusing to install."
+}
 
-Say "Pointing Claude Code at the CLI"
-node (Join-Path $srcDir "scripts\lib\set-env.mjs") $cli
-if ($LASTEXITCODE -ne 0) { Die "Could not write REVIEWGATE_CLI into the Claude Code settings." }
+if (-not (Test-Path $InstallDir)) { New-Item -ItemType Directory -Force $InstallDir | Out-Null }
+$target = Join-Path $InstallDir "reviewgate.exe"
 
-# --- the plugin --------------------------------------------------------------
+# A running gate holds the old binary open; move it aside rather than failing.
+if (Test-Path $target) {
+  $old = "$target.old"
+  Remove-Item $old -Force -ErrorAction SilentlyContinue
+  try { Move-Item $target $old -Force } catch { Die "reviewgate.exe is in use. Close it and run again." }
+}
+Move-Item $tmp $target -Force
+Say "reviewgate $tag installed at $target"
 
-if (Have "claude") {
-  Say "Registering the marketplace"
-  claude plugin marketplace add $srcDir
-  if ($LASTEXITCODE -ne 0) { claude plugin marketplace update reviewgate }
+# --- PATH --------------------------------------------------------------------
+#
+# The plugin runs `reviewgate hook`, so the gate only works when the shell Claude
+# Code starts can find it. setx-style user PATH edits reach new processes only.
 
-  Say "Installing the plugin"
-  claude plugin install reviewgate@reviewgate
-  if ($LASTEXITCODE -ne 0) { Die "claude plugin install failed." }
-} else {
-  Write-Host ""
-  Write-Host "The 'claude' CLI is not on your PATH, so the plugin was not installed. Run these"
-  Write-Host "two inside Claude Code instead:"
-  Write-Host ""
-  Write-Host "  /plugin marketplace add $srcDir"
-  Write-Host "  /plugin install reviewgate@reviewgate"
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$onPath = ($userPath -split ';' | Where-Object { $_.Trim().TrimEnd('\') -ieq $InstallDir.TrimEnd('\') }).Count -gt 0
+if (-not $onPath) {
+  Say "Adding $InstallDir to your user PATH"
+  $updated = if ([string]::IsNullOrWhiteSpace($userPath)) { $InstallDir } else { "$($userPath.TrimEnd(';'));$InstallDir" }
+  [Environment]::SetEnvironmentVariable("Path", $updated, "User")
+  $env:Path = "$env:Path;$InstallDir"
+  Warn "Open a new terminal (and restart Claude Code) so the new PATH is picked up."
+}
+
+# --- the Claude Code plugin --------------------------------------------------
+
+if (-not $NoPlugin) {
+  if (Have "claude") {
+    Say "Installing the Claude Code plugin"
+    claude plugin marketplace add $Repo
+    if ($LASTEXITCODE -ne 0) { claude plugin marketplace update reviewgate }
+    claude plugin install reviewgate@reviewgate
+    if ($LASTEXITCODE -ne 0) { Warn "could not install the plugin; do it from Claude Code." }
+  } else {
+    Write-Host ""
+    Write-Host "The 'claude' CLI is not on your PATH. Run these inside Claude Code instead:"
+    Write-Host ""
+    Write-Host "  /plugin marketplace add $Repo"
+    Write-Host "  /plugin install reviewgate@reviewgate"
+  }
 }
 
 Write-Host ""
-Write-Host "ReviewGate is installed." -ForegroundColor Green
-Write-Host "  checkout : $srcDir"
-Write-Host "  cli      : $cli"
-Write-Host ""
-Write-Host "Restart Claude Code so it picks up the hook. Optionally put the CLI on your PATH:"
-Write-Host "  npm link --workspace @reviewgate/cli   # from $srcDir"
+Write-Host "Done. Restart Claude Code so the gate picks up the hook." -ForegroundColor Green
+Write-Host "  reviewgate --version    what you have"
+Write-Host "  reviewgate update       pull in the next release"

@@ -18,7 +18,7 @@ import {
 import type { CreateCommentBody } from "@reviewgate/core/api";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
-import { findWebDist, readAsset } from "./assets.js";
+import { hasWebAssets, loadAsset } from "./assets.js";
 import { Highlighting } from "./highlight.js";
 import { DecisionConflict, Session } from "./session.js";
 
@@ -384,22 +384,16 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
   app.get("/r/:id", async (c) => {
     const id = c.req.param("id");
     if (!id || !store.get(id)) return c.text("unknown review", 404);
-    const dist = await findWebDist();
-    if (!dist) {
-      return c.text(
-        "The web UI has not been built. Run `npm run build:web`.",
-        503,
-      );
+    if (!(await hasWebAssets())) {
+      return c.text("The web UI has not been built. Run `npm run build:web`.", 503);
     }
-    const asset = await readAsset(dist, "index.html");
+    const asset = await loadAsset("index.html");
     if (!asset) return c.text("index.html is missing from the web build", 503);
     return c.body(asset.body, 200, { "content-type": asset.contentType });
   });
 
   app.get("/assets/*", async (c) => {
-    const dist = await findWebDist();
-    if (!dist) return c.text("not found", 404);
-    const asset = await readAsset(dist, new URL(c.req.url).pathname);
+    const asset = await loadAsset(new URL(c.req.url).pathname);
     if (!asset) return c.text("not found", 404);
     return c.body(asset.body, 200, {
       "content-type": asset.contentType,
@@ -409,8 +403,7 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
   });
 
   app.get("/favicon.svg", async (c) => {
-    const dist = await findWebDist();
-    const asset = dist ? await readAsset(dist, "favicon.svg") : null;
+    const asset = await loadAsset("favicon.svg");
     if (!asset) return c.body(null, 204);
     return c.body(asset.body, 200, { "content-type": asset.contentType });
   });

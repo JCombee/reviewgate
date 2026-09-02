@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { serve, type ServerType } from "@hono/node-server";
-import { NodeGitClient } from "@reviewgate/core";
+import { NodeGitClient, VERSION as CORE_VERSION } from "@reviewgate/core";
 import { createApp, SessionStore, type CreateSessionBody } from "./app.js";
 import {
   isAlive,
@@ -10,7 +10,7 @@ import {
   type ServerRecord,
 } from "./lockfile.js";
 
-export const VERSION = "0.0.0";
+export const VERSION = CORE_VERSION;
 
 export interface RunningServer {
   port: number;

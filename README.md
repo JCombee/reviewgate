@@ -28,8 +28,9 @@ A `deny` from a PreToolUse hook holds in *every* permission mode, including unde
 
 ## Installation
 
-One command per platform. It clones the repo, builds it with npm, and installs the
-plugin into Claude Code. Requires Node.js 20 or newer, npm and git.
+One command. It downloads a single self-contained binary, checks its SHA-256 and
+installs the Claude Code plugin. Nothing else has to be on the machine: no Node, no
+npm, no checkout.
 
 **macOS and Linux**
 
@@ -43,85 +44,51 @@ curl -fsSL https://raw.githubusercontent.com/JCombee/reviewgate/main/scripts/ins
 irm https://raw.githubusercontent.com/JCombee/reviewgate/main/scripts/install.ps1 | iex
 ```
 
-Restart Claude Code afterwards so it picks up the hook. Options and what the script
-touches: [`scripts/README.md`](scripts/README.md).
+Restart Claude Code afterwards so it picks up the hook. The binary lands in
+`~/.local/bin` (macOS, Linux) or `%LOCALAPPDATA%\Programs\reviewgate` (Windows), which
+the installer puts on your PATH. Options and what the script touches:
+[`scripts/README.md`](scripts/README.md).
 
-### By hand
+## Updating
 
-ReviewGate ships as a Claude Code plugin. This repo is also its marketplace, so
-installing takes two commands inside Claude Code:
+```bash
+reviewgate update           # replace the binary with the newest release
+reviewgate update --check   # only look, do not install
+reviewgate --version        # what you have now
+```
+
+The updater resolves the newest release, verifies the checksum and only then swaps the
+binary — a failed download leaves the working install untouched. Rerunning the install
+script does the same thing.
+
+The plugin itself is managed by Claude Code. After a release that changes the commands
+or the hook, run `/plugin marketplace update` once so it refreshes.
+
+## Installing without the script
+
+The plugin and the binary are separate things: the plugin wires `reviewgate hook` into
+Claude Code, the binary does the work. Inside Claude Code:
 
 ```
 /plugin marketplace add JCombee/reviewgate
 /plugin install reviewgate@reviewgate
 ```
 
-The plugin brings its own `PreToolUse` hook (`plugin/hooks/hooks.json`), the `/review`
-command and the `reviewgate` skill. No hand-editing of `settings.json`.
-
-The hook wrapper needs the built CLI. Clone the repo once and build it:
+Then put a `reviewgate` on your PATH, either from the
+[releases](https://github.com/JCombee/reviewgate/releases) or from source:
 
 ```bash
-git clone git@github.com:JCombee/reviewgate.git
+git clone https://github.com/JCombee/reviewgate.git
 cd reviewgate
 npm install
 npm run build
-```
-
-The wrapper looks for the CLI in this order: `$REVIEWGATE_CLI`, next to the plugin in a
-monorepo checkout, `plugin/node_modules/@reviewgate/cli`, then
-`node_modules/@reviewgate/cli` in the project you are working in. If the plugin lives
-somewhere other than your checkout, point it at the build explicitly:
-
-```bash
-export REVIEWGATE_CLI=/path/to/reviewgate/packages/cli/bin/reviewgate.mjs
-```
-
-If it finds nothing, the hook exits 0 and stays out of the way: a broken gate must
-never block the work, only fail to review it.
-
-For the `reviewgate` command in your own shell, link the CLI:
-
-```bash
 npm link --workspace @reviewgate/cli
 ```
 
-### Installing from a local checkout
+Both give the same `reviewgate hook` command, so the plugin does not care which one
+you have.
 
-Instead of the GitHub source, point the marketplace at the clone:
-
-```
-/plugin marketplace add /path/to/reviewgate
-/plugin install reviewgate@reviewgate
-```
-
-### Without the plugin
-
-Wiring the hook by hand works too. In a project's `.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/path/to/reviewgate/plugin/bin/reviewgate-hook.mjs\"",
-            "timeout": 3600
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-The wrapper is a Node script and is started explicitly with `node`: that way the gate
-works identically on macOS, Linux and Windows, without depending on a POSIX shell.
-
-### Recommended project settings
+## Recommended project settings
 
 Put in your project's `CLAUDE.md` that staging and committing should be separate
 commands. With `git add -A && git commit` nothing is in the index at hook time, so the
@@ -230,10 +197,11 @@ Everything under `.git/reviewgate/`, a path that is already outside version cont
 ## Development
 
 ```bash
-npm run build      # core, server, cli and the web bundle
-npm test           # vitest: unit and integration
-npm run test:e2e   # playwright: happy path and approve path
+npm run build         # core, server, cli and the web bundle
+npm test              # vitest: unit and integration
+npm run test:e2e      # playwright: happy path and approve path
 npm run typecheck
+npm run build:binaries  # the release binaries (needs bun)
 ```
 
 The hook can be tested on its own, without Claude Code:
@@ -242,6 +210,29 @@ The hook can be tested on its own, without Claude Code:
 echo '{"tool_name":"Bash","cwd":"'$PWD'","tool_input":{"command":"git commit -m test"}}' \
   | reviewgate hook
 ```
+
+### Releasing
+
+`bun build --compile` turns the CLI into one executable per platform, with the web
+build inlined by `scripts/embed-web.mjs` (a binary has no `dist` next to it). Bun is
+needed only to compile; everything else runs on npm.
+
+```bash
+npm run build:web
+node scripts/build-binaries.mjs --version 0.2.0     # all targets, into release/
+node scripts/build-binaries.mjs --target bun-linux-x64
+```
+
+Cutting a release: bump `version` in `package.json` (the workflow refuses a tag that
+disagrees with it), commit, then push the tag.
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+`.github/workflows/release.yml` runs the tests, compiles the five targets, writes a
+`.sha256` next to each one and publishes them as a GitHub release. That release is
+what the installer and `reviewgate update` read.
 
 ## Limits
 

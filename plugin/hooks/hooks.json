@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/reviewgate-hook.mjs\"",
+            "command": "reviewgate hook",
             "timeout": 3600
           }
         ]

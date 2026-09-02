@@ -2,101 +2,148 @@
 #
 # ReviewGate installer for macOS and Linux.
 #
-# Clones (or updates) the repo, builds it with npm, registers the marketplace and
-# installs the plugin. Safe to run again: it updates in place.
+# Downloads one self-contained binary from the newest GitHub release, checks its
+# SHA-256 and drops it in ~/.local/bin. No Node, no npm, no checkout. Run it again to
+# update; `reviewgate update` does the same thing from inside the binary.
 #
 #   curl -fsSL https://raw.githubusercontent.com/JCombee/reviewgate/main/scripts/install.sh | bash
 #
-# Environment:
-#   REVIEWGATE_HOME  where to keep the checkout (default ~/.reviewgate)
-#   REVIEWGATE_REF   branch or tag to install (default main)
+# Options:
+#   --version <tag>   install exactly this tag instead of the newest release
+#   --dir <path>      install somewhere other than ~/.local/bin
+#   --no-plugin       do not touch Claude Code; only place the binary
 set -euo pipefail
 
-REPO_URL="${REVIEWGATE_REPO:-https://github.com/JCombee/reviewgate.git}"
-REF="${REVIEWGATE_REF:-main}"
-HOME_DIR="${REVIEWGATE_HOME:-$HOME/.reviewgate}"
+REPO="${REVIEWGATE_REPO:-JCombee/reviewgate}"
+INSTALL_DIR="${REVIEWGATE_INSTALL_DIR:-$HOME/.local/bin}"
+VERSION="${REVIEWGATE_VERSION:-latest}"
+WITH_PLUGIN=1
 
-say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
-die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --version) VERSION="${2:-}"; shift 2 ;;
+    --dir) INSTALL_DIR="${2:-}"; shift 2 ;;
+    --no-plugin) WITH_PLUGIN=0; shift ;;
+    -h|--help) sed -n '3,17p' "$0" 2>/dev/null || true; exit 0 ;;
+    *) echo "install.sh: unknown option $1" >&2; exit 2 ;;
+  esac
+done
 
-# --- requirements ------------------------------------------------------------
+say()  { printf '\033[1m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[33mwarning:\033[0m %s\n' "$*" >&2; }
+die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-command -v git >/dev/null 2>&1 || die "git not found. Install git and run again."
-command -v node >/dev/null 2>&1 || die "node not found. Install Node.js 20 or newer: https://nodejs.org"
-command -v npm >/dev/null 2>&1 || die "npm not found. It ships with Node.js: https://nodejs.org"
+command -v curl >/dev/null 2>&1 || die "curl not found."
 
-NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-[ "$NODE_MAJOR" -ge 20 ] || die "Node.js 20 or newer required, found $(node -v)."
+# --- which binary ------------------------------------------------------------
 
-# --- the checkout ------------------------------------------------------------
+case "$(uname -s)" in
+  Darwin) os="darwin" ;;
+  Linux)  os="linux" ;;
+  *) die "unsupported platform $(uname -s). Windows has scripts/install.ps1." ;;
+esac
+case "$(uname -m)" in
+  arm64|aarch64) arch="arm64" ;;
+  x86_64|amd64)  arch="x64" ;;
+  *) die "unsupported architecture $(uname -m)." ;;
+esac
+asset="reviewgate-${os}-${arch}"
+
+# --- which release -----------------------------------------------------------
 #
-# Running from inside a clone uses that clone; piped from curl there is no script
-# path, so fall back to REVIEWGATE_HOME.
+# api.github.com allows 60 anonymous requests an hour per IP, which shared egress
+# blows through quickly. Use a token when one is around; fall back to anonymous when
+# the token turns out to be stale.
 
-SRC_DIR=""
-if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  if [ -f "$SCRIPT_DIR/../package.json" ] && grep -q '"reviewgate-monorepo"' "$SCRIPT_DIR/../package.json"; then
-    SRC_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+auth=()
+if [ -n "${GITHUB_TOKEN:-${GH_TOKEN:-}}" ]; then
+  auth=(-H "Authorization: Bearer ${GITHUB_TOKEN:-${GH_TOKEN}}")
+elif command -v gh >/dev/null 2>&1; then
+  if token="$(gh auth token --hostname github.com 2>/dev/null)" && [ -n "$token" ]; then
+    auth=(-H "Authorization: Bearer ${token}")
   fi
 fi
 
-if [ -z "$SRC_DIR" ]; then
-  if [ -d "$HOME_DIR/.git" ]; then
-    say "Updating $HOME_DIR"
-    git -C "$HOME_DIR" fetch --depth 1 origin "$REF"
-    git -C "$HOME_DIR" checkout -q FETCH_HEAD
+if [ "$VERSION" = "latest" ]; then
+  say "Looking up the newest release"
+  api="https://api.github.com/repos/${REPO}/releases/latest"
+  body="$(curl -sSL -w '\n%{http_code}' "${auth[@]}" "$api" 2>/dev/null || true)"
+  code="${body##*$'\n'}"
+  if [ "$code" = "401" ] && [ ${#auth[@]} -gt 0 ]; then
+    body="$(curl -sSL -w '\n%{http_code}' "$api" 2>/dev/null || true)"
+    code="${body##*$'\n'}"
+  fi
+  [ "$code" = "200" ] || die "could not read the releases of ${REPO} (HTTP ${code:-none})."
+  tag="$(printf '%s' "$body" | grep '"tag_name"' | head -n1 | cut -d'"' -f4)"
+  [ -n "$tag" ] || die "${REPO} has no releases yet."
+else
+  case "$VERSION" in v*) tag="$VERSION" ;; *) tag="v$VERSION" ;; esac
+fi
+unset auth token
+
+# --- download and verify -----------------------------------------------------
+
+url="https://github.com/${REPO}/releases/download/${tag}/${asset}"
+tmp="$(mktemp -t reviewgate.XXXXXX)"
+trap 'rm -f "$tmp" "$tmp.sha"' EXIT
+
+say "Downloading ${asset} ${tag}"
+curl -fsSL -o "$tmp" "$url" || die "${tag} has no ${asset}."
+curl -fsSL -o "$tmp.sha" "${url}.sha256" || die "no checksum published for ${asset}."
+
+expected="$(cut -d' ' -f1 < "$tmp.sha")"
+if [ "$os" = "darwin" ]; then
+  actual="$(shasum -a 256 "$tmp" | cut -d' ' -f1)"
+else
+  actual="$(sha256sum "$tmp" | cut -d' ' -f1)"
+fi
+[ "$actual" = "$expected" ] || die "checksum mismatch — refusing to install."
+
+mkdir -p "$INSTALL_DIR"
+chmod +x "$tmp"
+mv -f "$tmp" "$INSTALL_DIR/reviewgate"
+trap - EXIT
+rm -f "$tmp.sha"
+say "reviewgate ${tag} installed at ${INSTALL_DIR}/reviewgate"
+
+# --- PATH --------------------------------------------------------------------
+#
+# The plugin runs `reviewgate hook`, so the gate only works when the shell that
+# Claude Code starts can find it.
+
+case ":$PATH:" in
+  *":$INSTALL_DIR:"*) ;;
+  *)
+    warn "$INSTALL_DIR is not on your PATH."
+    echo "  Add this to your shell profile and open a new terminal:"
+    echo ""
+    echo "    export PATH=\"$INSTALL_DIR:\$PATH\""
+    echo ""
+    ;;
+esac
+
+# --- the Claude Code plugin --------------------------------------------------
+
+if [ "$WITH_PLUGIN" -eq 1 ]; then
+  if command -v claude >/dev/null 2>&1; then
+    say "Installing the Claude Code plugin"
+    claude plugin marketplace add "$REPO" 2>/dev/null || claude plugin marketplace update reviewgate || true
+    claude plugin install reviewgate@reviewgate || warn "could not install the plugin; do it from Claude Code."
   else
-    say "Cloning into $HOME_DIR"
-    rm -rf "$HOME_DIR"
-    git clone --depth 1 --branch "$REF" "$REPO_URL" "$HOME_DIR"
-  fi
-  SRC_DIR="$HOME_DIR"
-else
-  say "Using the checkout at $SRC_DIR"
-fi
+    cat <<MSG
 
-# --- build -------------------------------------------------------------------
+The 'claude' CLI is not on your PATH. Run these inside Claude Code instead:
 
-say "Installing dependencies"
-(cd "$SRC_DIR" && npm install --no-audit --no-fund)
-
-say "Building"
-(cd "$SRC_DIR" && npm run build)
-
-CLI="$SRC_DIR/packages/cli/bin/reviewgate.mjs"
-[ -f "$CLI" ] || die "Build finished but $CLI is missing."
-
-say "Pointing Claude Code at the CLI"
-node "$SRC_DIR/scripts/lib/set-env.mjs" "$CLI"
-
-# --- the plugin --------------------------------------------------------------
-
-if command -v claude >/dev/null 2>&1; then
-  say "Registering the marketplace"
-  claude plugin marketplace add "$SRC_DIR" || \
-    claude plugin marketplace update reviewgate || true
-  say "Installing the plugin"
-  claude plugin install reviewgate@reviewgate
-else
-  cat <<MSG
-
-The 'claude' CLI is not on your PATH, so the plugin was not installed. Run these two
-inside Claude Code instead:
-
-  /plugin marketplace add $SRC_DIR
+  /plugin marketplace add ${REPO}
   /plugin install reviewgate@reviewgate
 MSG
+  fi
 fi
 
 cat <<MSG
 
-ReviewGate is installed.
+Done. Restart Claude Code so the gate picks up the hook.
 
-  checkout : $SRC_DIR
-  cli      : $CLI
-
-Restart Claude Code so it picks up the hook. Optionally put the CLI on your PATH:
-
-  npm link --workspace @reviewgate/cli   # from $SRC_DIR
+  reviewgate --version    what you have
+  reviewgate update       pull in the next release
 MSG
