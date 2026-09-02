@@ -92,7 +92,11 @@ try {
   Die "no checksum published for $asset."
 }
 
-$expectedHash = ($expected -split '\s+')[0]
+# GitHub serves the .sha256 as application/octet-stream, and Windows PowerShell hands
+# back a Byte[] rather than a string for those. Splitting that on whitespace yields the
+# first byte value, which never matches and would fail every install.
+if ($expected -is [byte[]]) { $expected = [Text.Encoding]::ASCII.GetString($expected) }
+$expectedHash = ([string]$expected).Trim() -split '\s+' | Select-Object -First 1
 $actualHash = (Get-FileHash -Path $tmp -Algorithm SHA256).Hash
 if ($actualHash -ine $expectedHash) {
   Remove-Item $tmp -Force -ErrorAction SilentlyContinue
