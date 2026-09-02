@@ -8,6 +8,8 @@ Entries describe what changed for someone using the gate, not which files moved.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-02
+
 ### Fixed
 
 - Approving took about 25 seconds to reach the commit. The verdict was on stdout at
@@ -23,6 +25,9 @@ Entries describe what changed for someone using the gate, not which files moved.
 
 - The README covers what the install script does per platform, which asset each
   platform gets, how to update the plugin next to the binary, and how to remove both.
+- Cutting a release is a documented skill (`.claude/skills/release`), and this
+  changelog exists. The release workflow refuses a tag that any manifest disagrees
+  with, or that the changelog has never heard of.
 
 ## [0.1.0] - 2026-09-02
 
@@ -47,5 +52,6 @@ The first release, and the first one you can install without a checkout.
 - The Claude Code plugin: the `PreToolUse` hook, the `/review` command and the
   `reviewgate` skill.
 
-[Unreleased]: https://github.com/JCombee/reviewgate/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/JCombee/reviewgate/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/JCombee/reviewgate/releases/tag/v0.1.1
 [0.1.0]: https://github.com/JCombee/reviewgate/releases/tag/v0.1.0

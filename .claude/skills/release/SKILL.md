@@ -78,8 +78,13 @@ They must all agree — the workflow refuses a tag that disagrees with the root
 Then sync the lockfile, which carries those versions too:
 
 ```bash
-npm install --package-lock-only
+npm install --include=optional
 ```
+
+Never `--package-lock-only` here: it rewrites the lockfile without the
+platform-specific optional packages, which silently drops lightningcss's native binary
+and breaks the web build on the next clean install. If the lockfile has already lost
+them, delete it and run the command above.
 
 The binary does not read any of these: its version comes from the tag through
 `--define`. They matter for the workflow's guard, for the plugin, and for anyone
@@ -94,7 +99,8 @@ npm run typecheck
 ```
 
 All three must pass. The suite spawns the built CLI, so the build genuinely has to
-come first.
+come first. CI runs the first two but not `typecheck`, so this is the only place a
+type error is caught before the tag.
 
 For a release that touches the server, the CLI or the web UI, also compile and run the
 host binary — the compiled build is a different environment from `node dist/`, and
