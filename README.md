@@ -233,6 +233,12 @@ not block the work, at most keep it from being reviewed the way it was meant to 
 | `REVIEWGATE_TIMEOUT_MS` | overrides `timeoutMs` |
 | `REVIEWGATE_NO_OPEN=1` | do not open the browser |
 | `REVIEWGATE_AUTO_REVIEW=0` | turn the automatic pass off |
+| `REVIEWGATE_CLAUDE_PATH` | the `claude` executable the assistant should use |
+
+The chat panel and the automatic pass run through the Claude Code CLI on your machine.
+ReviewGate looks for it on your `PATH` and in the places the native installer uses; set
+`REVIEWGATE_CLAUDE_PATH` when yours lives somewhere else. Without a `claude` the chat
+says so and the rest of the review carries on as usual.
 
 ## What ends up on disk
 

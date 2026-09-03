@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import type { IncomingSuggestion, Review, Severity } from "@reviewgate/core";
 import type { Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { ClaudePathInvalid, resolveClaudePath } from "./claude-path.js";
 
 /**
  * The read-only reviewer assistant behind the chat panel and the automatic pass (§9).
@@ -49,6 +50,25 @@ export class AgentUnavailable extends Error {
   }
 }
 
+/**
+ * The `claude` the SDK should spawn. Without one there is no assistant, and the reader
+ * deserves a sentence they can act on rather than the SDK's talk of optional npm
+ * dependencies.
+ */
+function claudeExecutable(): string {
+  let path: string | null;
+  try {
+    path = resolveClaudePath();
+  } catch (err) {
+    if (err instanceof ClaudePathInvalid) throw new AgentUnavailable(err.message);
+    throw err;
+  }
+  if (path) return path;
+  throw new AgentUnavailable(
+    "Claude Code was not found on this machine. Install Claude Code, or point REVIEWGATE_CLAUDE_PATH at the claude executable.",
+  );
+}
+
 const SYSTEM_PROMPT = `You are a reviewer assistant inside ReviewGate, a local code review gate.
 
 You explain and analyse; you change nothing. You have read-only access to the repo
@@ -78,9 +98,12 @@ export class ReviewAgent {
 
   constructor(readonly context: AgentContext) {}
 
-  #options(): Options {
+  #options(executable: string): Options {
     return {
       cwd: this.context.repoRoot,
+      // The released binary carries no node_modules, so the SDK cannot resolve its own
+      // native CLI. We point it at the `claude` that is on this machine instead.
+      pathToClaudeCodeExecutable: executable,
       allowedTools: ALLOWED_TOOLS,
       // Double-locked: explicitly refuse what the review must not touch.
       disallowedTools: ["Edit", "Write", "NotebookEdit", "Bash", "Task", "WebFetch", "WebSearch"],
@@ -96,10 +119,11 @@ export class ReviewAgent {
    * the UI can read along while the answer grows.
    */
   async ask(prompt: string, onToken?: (text: string) => void): Promise<string> {
+    const executable = claudeExecutable();
     let answer = "";
     try {
       const query = await loadQuery();
-      for await (const message of query({ prompt, options: this.#options() })) {
+      for await (const message of query({ prompt, options: this.#options(executable) })) {
         this.#trackSession(message);
         const chunk = partialText(message);
         if (chunk) {

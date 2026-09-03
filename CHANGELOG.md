@@ -8,6 +8,15 @@ Entries describe what changed for someone using the gate, not which files moved.
 
 ## [Unreleased]
 
+### Fixed
+
+- The chat and the automatic pass failed in the released binaries with "Native CLI
+  binary for linux-x64 not found". The Agent SDK looked for its own CLI in a
+  `node_modules` that a single-file binary does not have. ReviewGate now uses the
+  `claude` on your machine, found on the `PATH` or in the native installer's
+  locations, and `REVIEWGATE_CLAUDE_PATH` points it elsewhere. Without a `claude` the
+  chat says which one it is missing instead of talking about npm.
+
 ## [0.1.1] - 2026-09-02
 
 ### Fixed
