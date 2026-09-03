@@ -8,6 +8,8 @@ Entries describe what changed for someone using the gate, not which files moved.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-03
+
 ### Fixed
 
 - The chat and the automatic pass failed in the released binaries with "Native CLI
@@ -61,6 +63,7 @@ The first release, and the first one you can install without a checkout.
 - The Claude Code plugin: the `PreToolUse` hook, the `/review` command and the
   `reviewgate` skill.
 
-[Unreleased]: https://github.com/JCombee/reviewgate/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/JCombee/reviewgate/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/JCombee/reviewgate/releases/tag/v0.1.2
 [0.1.1]: https://github.com/JCombee/reviewgate/releases/tag/v0.1.1
 [0.1.0]: https://github.com/JCombee/reviewgate/releases/tag/v0.1.0
