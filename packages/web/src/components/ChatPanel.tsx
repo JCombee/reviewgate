@@ -72,7 +72,7 @@ export function ChatPanel({
   };
 
   return (
-    <div className="flex h-full flex-col border-l border-[var(--rg-border)] bg-[var(--rg-bg-sunken)]">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b border-[var(--rg-border)] px-3 py-2">
         <span className="text-[11px] uppercase tracking-wide text-[var(--rg-text-faint)]">
           Conversation

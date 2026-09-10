@@ -8,6 +8,13 @@ Entries describe what changed for someone using the gate, not which files moved.
 
 ## [Unreleased]
 
+### Added
+
+- The panel on the right now holds a second tab: every comment in the review in one
+  list, filtered by open, resolved or outdated and grouped per file. Clicking one takes
+  you to the thread in the diff — it unfolds a collapsed file and opens the outdated
+  section if that is where the comment lives.
+
 ### Fixed
 
 - The gate kept waiting after you approved or requested changes. The hook waited for

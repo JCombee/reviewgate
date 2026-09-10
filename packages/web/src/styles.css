@@ -277,3 +277,22 @@ body {
     background-color 140ms ease,
     color 140ms ease;
 }
+
+/*
+  A jump from the comment list has to land visibly: the thread lights up briefly and
+  then settles back into the page.
+*/
+.rg-flash {
+  animation: rg-flash 1.5s ease-out;
+}
+
+@keyframes rg-flash {
+  from {
+    background: var(--rg-add-gutter);
+    box-shadow: inset 0 0 0 2px var(--rg-focus);
+  }
+  to {
+    background: var(--rg-bg-raised);
+    box-shadow: inset 0 0 0 2px transparent;
+  }
+}

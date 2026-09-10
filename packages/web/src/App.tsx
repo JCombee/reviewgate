@@ -1,8 +1,15 @@
-import type { PassStatus, Review, ReviewSummary, Suggestion } from "@reviewgate/core/api";
+import type {
+  Comment,
+  PassStatus,
+  Review,
+  ReviewSummary,
+  Suggestion,
+} from "@reviewgate/core/api";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fetchSummary, readContext } from "./api.js";
 import { ActionBar } from "./components/ActionBar.jsx";
 import { ChatPanel } from "./components/ChatPanel.jsx";
+import { CommentsPanel } from "./components/CommentsPanel.jsx";
 import { FilePanel } from "./components/FilePanel.jsx";
 import { Overview } from "./components/Overview.jsx";
 import { Sidebar } from "./components/Sidebar.jsx";
@@ -10,8 +17,12 @@ import { createReviewApi, subscribeToReview } from "./lib/reviewClient.js";
 
 type View = "unified" | "split";
 
+/** The right-hand side holds either the conversation or the list of comments (§8). */
+type PanelTab = "chat" | "comments";
+
 const VIEW_KEY = "reviewgate.view";
 const CHAT_KEY = "reviewgate.chat";
+const PANEL_TAB_KEY = "reviewgate.panel";
 
 const SCOPE_LABEL: Readonly<Record<string, string>> = {
   staged: "staged",
@@ -27,7 +38,12 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>(readView);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [chatOpen, setChatOpen] = useState(readChatOpen);
+  const [panelOpen, setPanelOpen] = useState(readPanelOpen);
+  const [panelTab, setPanelTab] = useState<PanelTab>(readPanelTab);
+  /** The file a comment jump wants unfolded; the number makes a repeat click count. */
+  const [reveal, setReveal] = useState<{ index: number; nonce: number } | null>(null);
+  /** Same for the folded-away outdated comments in the overview. */
+  const [revealOutdated, setRevealOutdated] = useState<number | null>(null);
   const [passStatus, setPassStatus] = useState<PassStatus>({ state: "idle" });
   const [streaming, setStreaming] = useState<string | null>(null);
   const [chatDraft, setChatDraft] = useState<string | null>(null);
@@ -70,11 +86,12 @@ export function App() {
   useEffect(() => {
     try {
       window.localStorage.setItem(VIEW_KEY, view);
-      window.localStorage.setItem(CHAT_KEY, chatOpen ? "1" : "0");
+      window.localStorage.setItem(CHAT_KEY, panelOpen ? "1" : "0");
+      window.localStorage.setItem(PANEL_TAB_KEY, panelTab);
     } catch {
       // Private mode or blocked storage: the choice then holds for this session only.
     }
-  }, [view, chatOpen]);
+  }, [view, panelOpen, panelTab]);
 
   const goToFile = useCallback((index: number) => {
     const el = fileRefs.current.get(index);
@@ -88,8 +105,38 @@ export function App() {
       ? `${suggestion.path}${suggestion.startLine ? `:${suggestion.startLine}` : ""}`
       : "the change as a whole";
     setChatDraft(`About this suggestion at ${where}: "${suggestion.body}" — does that hold?`);
-    setChatOpen(true);
+    setPanelTab("chat");
+    setPanelOpen(true);
   }, []);
+
+  /** Opening the tab that is already showing folds the panel away again. */
+  const togglePanel = (tab: PanelTab) => {
+    if (panelOpen && panelTab === tab) {
+      setPanelOpen(false);
+      return;
+    }
+    setPanelTab(tab);
+    setPanelOpen(true);
+  };
+
+  /**
+   * From the list to the thread itself: unfold the file, scroll to it, and then wait
+   * for the comment to be there — a file only loads its diff once it is in view.
+   */
+  const goToComment = useCallback(
+    (comment: Comment) => {
+      if (comment.status === "outdated") setRevealOutdated((n) => (n ?? 0) + 1);
+      if (comment.scope === "line" && comment.path) {
+        const file = summary?.files.find((f) => f.path === comment.path);
+        if (file) {
+          setReveal((prev) => ({ index: file.index, nonce: (prev?.nonce ?? 0) + 1 }));
+          goToFile(file.index);
+        }
+      }
+      focusComment(comment.id);
+    },
+    [summary, goToFile],
+  );
 
   const fileCount = summary?.files.length ?? 0;
 
@@ -166,14 +213,36 @@ export function App() {
         )}
 
         <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setChatOpen((v) => !v)}
-            aria-pressed={chatOpen}
-            className="rounded border border-[var(--rg-border)] px-2 py-0.5 text-[var(--rg-text-muted)]"
+          <div
+            className="flex overflow-hidden rounded border border-[var(--rg-border)]"
+            role="group"
+            aria-label="Side panel"
           >
-            Conversation
-          </button>
+            {(["chat", "comments"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => togglePanel(tab)}
+                aria-pressed={panelOpen && panelTab === tab}
+                className={`px-2 py-0.5 ${
+                  panelOpen && panelTab === tab
+                    ? "bg-[var(--rg-bg-sunken)] text-[var(--rg-text)]"
+                    : "text-[var(--rg-text-muted)]"
+                }`}
+              >
+                {tab === "chat" ? (
+                  "Conversation"
+                ) : (
+                  <>
+                    Comments{" "}
+                    <span className="tabular-nums text-[var(--rg-text-faint)]">
+                      {review.comments.length}
+                    </span>
+                  </>
+                )}
+              </button>
+            ))}
+          </div>
           <div
             className="flex overflow-hidden rounded border border-[var(--rg-border)]"
             role="group"
@@ -200,7 +269,12 @@ export function App() {
 
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-80 shrink-0 flex-col overflow-y-auto border-r border-[var(--rg-border)] bg-[var(--rg-bg-sunken)]">
-          <Overview review={review} api={api} onDiscuss={onDiscuss} />
+          <Overview
+            review={review}
+            api={api}
+            onDiscuss={onDiscuss}
+            revealOutdated={revealOutdated}
+          />
           <Sidebar summary={summary} review={review} activeIndex={activeIndex} onSelect={goToFile} />
         </aside>
 
@@ -218,22 +292,32 @@ export function App() {
                 api={api}
                 registerRef={registerRef}
                 onDiscuss={onDiscuss}
+                reveal={reveal?.index === f.index ? reveal.nonce : null}
               />
             ))
           )}
         </main>
 
-        {chatOpen && (
-          <aside className="w-96 shrink-0">
-            <ChatPanel
-              ctx={ctx}
-              review={review}
-              api={api}
-              streaming={streaming}
-              passStatus={passStatus}
-              draft={chatDraft}
-              onDraftUsed={() => setChatDraft(null)}
-            />
+        {panelOpen && (
+          <aside className="flex w-96 min-h-0 shrink-0 flex-col border-l border-[var(--rg-border)] bg-[var(--rg-bg-sunken)]">
+            {panelTab === "chat" ? (
+              <ChatPanel
+                ctx={ctx}
+                review={review}
+                api={api}
+                streaming={streaming}
+                passStatus={passStatus}
+                draft={chatDraft}
+                onDraftUsed={() => setChatDraft(null)}
+              />
+            ) : (
+              <CommentsPanel
+                summary={summary}
+                review={review}
+                api={api}
+                onSelect={goToComment}
+              />
+            )}
           </aside>
         )}
       </div>
@@ -267,12 +351,42 @@ function readView(): View {
   }
 }
 
-function readChatOpen(): boolean {
+function readPanelOpen(): boolean {
   try {
     return window.localStorage.getItem(CHAT_KEY) !== "0";
   } catch {
     return true;
   }
+}
+
+function readPanelTab(): PanelTab {
+  try {
+    return window.localStorage.getItem(PANEL_TAB_KEY) === "comments" ? "comments" : "chat";
+  } catch {
+    return "chat";
+  }
+}
+
+/**
+ * Scrolls to a comment and marks it briefly. The thread may still have to be rendered
+ * — the file loads its diff lazily — so we look again for a moment before giving up.
+ */
+function focusComment(id: string, timeoutMs = 4000): void {
+  const started = performance.now();
+  const look = () => {
+    const el = document.querySelector<HTMLElement>(`[data-comment-id="${CSS.escape(id)}"]`);
+    if (!el) {
+      if (performance.now() - started < timeoutMs) requestAnimationFrame(look);
+      return;
+    }
+    el.scrollIntoView({ block: "center", behavior: "auto" });
+    // Restart the animation when the same comment is clicked twice in a row.
+    el.classList.remove("rg-flash");
+    void el.offsetWidth;
+    el.classList.add("rg-flash");
+    window.setTimeout(() => el.classList.remove("rg-flash"), 1600);
+  };
+  requestAnimationFrame(look);
 }
 
 function Centered({ children }: { children: ReactNode }) {
