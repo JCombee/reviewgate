@@ -11,6 +11,7 @@
     "build:ts": "tsc -b packages/core packages/server packages/cli",
     "build:web": "npm run build --workspace @reviewgate/web",
     "clean": "tsc -b --clean packages/core packages/server packages/cli",
+    "pretest": "npm run build:ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b --noEmit packages/core packages/server packages/cli && npm run typecheck --workspace @reviewgate/web",
