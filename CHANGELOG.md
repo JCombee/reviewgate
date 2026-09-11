@@ -8,6 +8,17 @@ Entries describe what changed for someone using the gate, not which files moved.
 
 ## [Unreleased]
 
+### Fixed
+
+- The gate kept waiting after you approved or requested changes. The hook waited for
+  the browser launcher to finish, and a launcher does not finish until the browser it
+  started closes. The review page said the commit could go through, while Claude Code
+  sat on a hook that had not started watching for a decision yet. ReviewGate now
+  starts the browser detached and never waits on it.
+- A decision reaches the commit within milliseconds. The hook watches the review file
+  instead of only reading it every 400 milliseconds, and it flushes its verdict and
+  exits rather than waiting for the last timer, socket or subprocess to finish.
+
 ## [0.1.2] - 2026-09-03
 
 ### Fixed

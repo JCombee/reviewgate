@@ -47,6 +47,18 @@ type Verdict =
   | { kind: "deny"; reason: string };
 
 export async function cmdHook(cwdFallback: string): Promise<number> {
+  const code = await runHook(cwdFallback);
+
+  // From here on nothing in this process matters any more, and several things can
+  // still be holding the event loop open: a browser the launcher left behind, a
+  // keep-alive socket to the server, an agent that is still thinking. Claude Code
+  // waits for this process to end, not for its output, so a lingering handle reads as
+  // a gate that never lifts. Flush the verdict and go.
+  await flush(process.stdout);
+  process.exit(code);
+}
+
+async function runHook(cwdFallback: string): Promise<number> {
   const raw = await readStdin();
 
   let payload: HookPayload;
@@ -136,8 +148,10 @@ async function decide(
     transcriptPath: payload.transcript_path ?? null,
   });
 
-  // In tests and on headless machines the browser is unwanted or absent.
-  if (config.autoOpen && process.env["REVIEWGATE_NO_OPEN"] !== "1") await openBrowser(session.url);
+  // In tests and on headless machines the browser is unwanted or absent. Deliberately
+  // not awaited: opening a window is not a step the review waits on, and the decision
+  // may already be there before the browser has finished starting.
+  if (config.autoOpen && process.env["REVIEWGATE_NO_OPEN"] !== "1") void openBrowser(session.url);
 
   // The environment variable wins over the config; it exists to adjust things per
   // invocation, in tests for instance.
@@ -241,6 +255,15 @@ function emit(verdict: Verdict): void {
 
 function toPosix(p: string): string {
   return p.split(path.win32.sep).join("/");
+}
+
+/** `process.exit` drops whatever is still buffered, so wait for the write to land. */
+function flush(stream: NodeJS.WriteStream): Promise<void> {
+  if (stream.writableLength === 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    stream.write("", () => resolve());
+    setTimeout(resolve, 1000).unref();
+  });
 }
 
 async function readStdin(): Promise<string> {

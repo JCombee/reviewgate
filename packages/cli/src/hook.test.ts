@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readApproval, ReviewStore, TestRepo, type Review } from "@reviewgate/core";
@@ -283,4 +285,64 @@ describe("hook — blocking", () => {
     const hash = rounds[rounds.length - 1]?.diffHash ?? "";
     expect(await readApproval(gitDir, hash)).toBeNull();
   }, 60_000);
+});
+
+/**
+ * The gate opens a browser, and a browser outlives the launcher that started it. If
+ * the hook waits for that launcher's output to end, it waits for the browser window to
+ * be closed: the review is decided, the UI says so, and Claude Code keeps sitting on a
+ * hook that is already done (§2).
+ */
+describe("hook — the browser must not hold the gate", () => {
+  let launcherDir: string | null = null;
+
+  afterEach(async () => {
+    if (launcherDir) await fs.rm(launcherDir, { recursive: true, force: true });
+    launcherDir = null;
+  });
+
+  const exists = (p: string): Promise<boolean> =>
+    fs.access(p).then(
+      () => true,
+      () => false,
+    );
+
+  /** A launcher that behaves like the real one: it leaves a process behind and exits. */
+  async function fakeLauncher(): Promise<string> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "reviewgate-launcher-"));
+    const file = path.join(dir, process.platform === "darwin" ? "open" : "xdg-open");
+    // The marker proves the hook really went through the launcher; without it the test
+    // could pass on a gate that never opened a browser at all.
+    await fs.writeFile(file, `#!/bin/sh\ntouch ${path.join(dir, "opened")}\nsleep 20 &\nexit 0\n`, {
+      mode: 0o755,
+    });
+    launcherDir = dir;
+    return dir;
+  }
+
+  it.skipIf(process.platform === "win32")(
+    "exits on the decision while the browser it opened is still running",
+    async () => {
+      const dir = await fakeLauncher();
+      await stageChange();
+
+      const hook = runHook('git commit -m "fix: something"', {
+        REVIEWGATE_NO_OPEN: "0",
+        PATH: `${dir}${path.delimiter}${process.env["PATH"] ?? ""}`,
+      });
+      await waitForReview();
+
+      await decide("approve", "fine");
+      const started = Date.now();
+      const { stdout, code } = await hook.done;
+
+      expect(await exists(path.join(dir, "opened"))).toBe(true);
+      expect(Date.now() - started).toBeLessThan(10_000);
+      expect(code).toBe(0);
+      expect((JSON.parse(stdout) as HookOutput).hookSpecificOutput?.permissionDecision).toBe(
+        "allow",
+      );
+    },
+    60_000,
+  );
 });
