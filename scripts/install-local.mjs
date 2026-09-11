@@ -184,14 +184,13 @@ function compile(out) {
 }
 
 /**
- * The build a launcher needs. The UI travels through the generated asset file, and the
- * embedded copy wins over `packages/web/dist`, so a fresh web build alone would still
- * serve whatever was embedded last.
+ * The build a launcher needs: the compiled server and CLI, and the web build the
+ * server reads from `packages/web/dist`. Deliberately not the embed step — that
+ * overwrites a file in the tree that is a stub on purpose, and a source build has no
+ * use for it.
  */
 function buildFromSource() {
-  npm("npm", ["run", "build:web"]);
-  npm(process.execPath, [path.join(root, "scripts", "embed-web.mjs")]);
-  npm("npm", ["run", "build:ts"]);
+  npm("npm", ["run", "build"]);
 }
 
 /** A launcher is the way in on a machine where bun will not compile the checkout. */

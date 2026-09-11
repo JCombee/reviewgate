@@ -115,10 +115,9 @@ It needs Node at run time, reports `0.0.0-dev` (a version is compiled in, and a 
 run has none), and `reviewgate update` leaves it alone: it refuses to replace a build
 from source.
 
-This is also the shape to use while working on the UI. The web assets travel through a
-generated file that is baked into the server, and the embedded copy wins over
-`packages/web/dist`, so `--wrapper` re-runs `embed-web.mjs` for you — a plain
-`npm run build:web` would leave the gate serving the previously embedded UI.
+It runs `npm run build` and stops there. The embed step is for binaries only: it fills
+a file that is a stub on purpose, and a source build reads the UI from
+`packages/web/dist` anyway.
 
 The build carries a `-local.<sha>` version so `reviewgate --version` says which one you
 are on. It counts as the released version it was built from, so `reviewgate update`
