@@ -10,6 +10,12 @@ Entries describe what changed for someone using the gate, not which files moved.
 
 ### Fixed
 
+- A build from source now serves the web assets next to it, so `npm run build:web` is
+  all a checkout needs to see its own UI. A leftover embed — `embed-web.mjs` runs as
+  part of building a binary and overwrites a file in the tree — used to shadow that
+  build silently, and `REVIEWGATE_WEB_DIST` could not override it either, though it
+  said it could. A binary still serves only the copy compiled into it.
+
 - The gate kept waiting after you approved or requested changes. The hook waited for
   the browser launcher to finish, and a launcher does not finish until the browser it
   started closes. The review page said the commit could go through, while Claude Code
