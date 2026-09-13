@@ -110,7 +110,7 @@ export type PassStatus =
 /** Server-sent events on `/api/review/:id/events` (§7). */
 export type ReviewEvent =
   | { type: "review"; review: Review }
-  | { type: "chat-token"; text: string }
+  | { type: "chat-token"; chatId: string; text: string }
   | { type: "pass"; status: PassStatus }
   | { type: "ping" };
 
@@ -129,6 +129,7 @@ export type {
 export type { IntralinePair, IntralineSegment } from "./diff/intraline.js";
 export type {
   Author,
+  Chat,
   ChatMessage,
   Comment,
   CommentKind,

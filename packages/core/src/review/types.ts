@@ -70,6 +70,14 @@ export interface ChatMessage {
   at: string;
 }
 
+export interface Chat {
+  id: string;
+  title: string;
+  model: string | null;
+  messages: ChatMessage[];
+  createdAt: string;
+}
+
 export type Decision = "approve" | "request_changes" | "timeout";
 
 export interface Round {
@@ -97,7 +105,7 @@ export interface Review {
   rounds: Round[];
   comments: Comment[];
   suggestions: Suggestion[];
-  chat: ChatMessage[];
+  chats: Chat[];
   status: ReviewStatus;
 }
 
