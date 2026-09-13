@@ -13,3 +13,5 @@ playwright-report/
 /release/
 # Bun keeps its cross-compile downloads here.
 .bun-cache/
+# The browsers for the e2e suite, kept in the project instead of in ~/.cache.
+/.playwright/
