@@ -27,11 +27,8 @@ export function ActionBar({
   const outdated = review.comments.filter((c) => c.status === "outdated");
   const decision = open.length === 0 ? "approve" : "request_changes";
 
-  const round = review.rounds[review.rounds.length - 1];
-  const decided = round?.decision != null;
-
   const submit = async () => {
-    if (busy || decided) return;
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -71,23 +68,6 @@ export function ActionBar({
       void submit();
     }
   };
-
-  if (decided) {
-    return (
-      <footer className="flex h-12 shrink-0 items-center gap-3 border-t border-[var(--rg-border)] bg-[var(--rg-bg-raised)] px-3">
-        <span
-          style={{
-            color: round?.decision === "approve" ? "var(--rg-approve)" : "var(--rg-changes)",
-          }}
-        >
-          {round?.decision === "approve"
-            ? "Approved — the commit goes through."
-            : "Changes requested — the feedback is in the session."}
-        </span>
-        <span className="text-[var(--rg-text-faint)]">You can close this window.</span>
-      </footer>
-    );
-  }
 
   return (
     <footer className="flex h-12 shrink-0 items-center gap-3 border-t border-[var(--rg-border)] bg-[var(--rg-bg-raised)] px-3">

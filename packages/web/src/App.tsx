@@ -177,6 +177,21 @@ export function App() {
   if (error) return <Centered>Could not load the review: {error}</Centered>;
   if (!summary || !review || !api) return <Centered>loading…</Centered>;
 
+  const decision = review.rounds[review.rounds.length - 1]?.decision ?? null;
+  if (decision != null) {
+    return (
+      <Centered>
+        <span style={{ color: decision === "approve" ? "var(--rg-approve)" : "var(--rg-changes)" }}>
+          {decision === "approve"
+            ? "Approved — the commit goes through."
+            : "Changes requested — the feedback is in the session."}
+        </span>
+        <br />
+        <span className="text-[var(--rg-text-faint)]">You can close this window.</span>
+      </Centered>
+    );
+  }
+
   const empty = summary.files.length === 0;
   const openCount = review.comments.filter((c) => c.status === "open").length;
   const round = review.rounds.length;
