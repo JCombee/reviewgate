@@ -25,6 +25,8 @@ export interface AgentContext {
   transcriptPath: string | null;
   /** Project instructions the pass should weigh. */
   projectDocs: string;
+  /** The model this chat picked, if any; null/unset means the SDK's own default. */
+  model?: string | null;
 }
 
 /**
@@ -111,6 +113,9 @@ export class ReviewAgent {
       systemPrompt: SYSTEM_PROMPT,
       includePartialMessages: true,
       ...(this.#sessionId ? { resume: this.#sessionId } : {}),
+      ...(this.context.model && this.context.model.trim() !== ""
+        ? { model: this.context.model }
+        : {}),
     };
   }
 

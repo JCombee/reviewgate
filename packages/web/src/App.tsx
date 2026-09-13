@@ -45,8 +45,12 @@ export function App() {
   /** Same for the folded-away outdated comments in the overview. */
   const [revealOutdated, setRevealOutdated] = useState<number | null>(null);
   const [passStatus, setPassStatus] = useState<PassStatus>({ state: "idle" });
-  const [streaming, setStreaming] = useState<string | null>(null);
+  /** Answer tokens still arriving, keyed by chat id, so chats never cross-talk. */
+  const [streaming, setStreaming] = useState<Record<string, string>>({});
   const [chatDraft, setChatDraft] = useState<string | null>(null);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const chatsInitializedRef = useRef(false);
+  const knownChatIdsRef = useRef<Set<string>>(new Set());
 
   const fileRefs = useRef(new Map<number, HTMLElement>());
   const registerRef = useCallback((index: number, el: HTMLElement | null) => {
@@ -75,13 +79,34 @@ export function App() {
     return subscribeToReview(ctx, {
       onReview: (next) => {
         setReview(next);
-        // The answer is in the review itself now; the loose stream can go.
-        setStreaming(null);
+        // The answers are in the review itself now; the loose streams can go.
+        setStreaming({});
       },
-      onChatToken: (text) => setStreaming((prev) => (prev ?? "") + text),
+      onChatToken: (chatId, text) =>
+        setStreaming((prev) => ({ ...prev, [chatId]: (prev[chatId] ?? "") + text })),
       onPass: setPassStatus,
     });
   }, [ctx]);
+
+  // Keep `activeChatId` pointed at a real chat: the first one on initial load, and
+  // whichever chat is newly created afterwards (from "New chat" or from "Discuss").
+  useEffect(() => {
+    if (!review) return;
+    const ids = review.chats.map((c) => c.id);
+    if (!chatsInitializedRef.current) {
+      chatsInitializedRef.current = true;
+      knownChatIdsRef.current = new Set(ids);
+      setActiveChatId(ids[0] ?? null);
+      return;
+    }
+    const newIds = ids.filter((id) => !knownChatIdsRef.current.has(id));
+    knownChatIdsRef.current = new Set(ids);
+    if (newIds.length > 0) {
+      setActiveChatId(newIds[newIds.length - 1] ?? null);
+    } else {
+      setActiveChatId((prev) => (prev !== null && ids.includes(prev) ? prev : (ids[0] ?? null)));
+    }
+  }, [review]);
 
   useEffect(() => {
     try {
@@ -318,9 +343,12 @@ export function App() {
             {panelTab === "chat" ? (
               <ChatPanel
                 ctx={ctx}
-                review={review}
+                chats={review.chats}
+                activeChatId={activeChatId}
+                onSelectChat={setActiveChatId}
+                onNewChat={() => void api.createChat()}
                 api={api}
-                streaming={streaming}
+                streaming={activeChatId !== null ? (streaming[activeChatId] ?? null) : null}
                 passStatus={passStatus}
                 draft={chatDraft}
                 onDraftUsed={() => setChatDraft(null)}
