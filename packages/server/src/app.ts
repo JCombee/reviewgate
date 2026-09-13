@@ -234,18 +234,47 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
 
 
   // --- chat and suggestions (§9) -------------------------------------------
-  app.post("/api/review/:id/chat", async (c) => {
+  app.post("/api/review/:id/chats", async (c) => {
     const s = resolve(c);
     if (!isSession(s)) return s;
+    const body = (await c.req.json().catch(() => null)) as
+      | { title?: string; model?: string | null }
+      | null;
+    try {
+      const review = await s.createChat(body?.title, body?.model);
+      return c.json({ review });
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 503);
+    }
+  });
+
+  app.post("/api/review/:id/chats/:chatId/messages", async (c) => {
+    const s = resolve(c);
+    if (!isSession(s)) return s;
+    const chatId = c.req.param("chatId") ?? "";
     const body = (await c.req.json().catch(() => null)) as { message?: string } | null;
     const message = body?.message;
     if (typeof message !== "string" || message.trim() === "") {
       return c.json({ error: "message is missing" }, 400);
     }
     try {
-      const review = await s.chat(message);
+      const review = await s.chat(chatId, message);
       return c.json({ review });
     } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 503);
+    }
+  });
+
+  app.patch("/api/review/:id/chats/:chatId", async (c) => {
+    const s = resolve(c);
+    if (!isSession(s)) return s;
+    const chatId = c.req.param("chatId") ?? "";
+    const body = (await c.req.json().catch(() => null)) as { model?: string | null } | null;
+    try {
+      const review = await s.setChatModel(chatId, body?.model ?? null);
+      return c.json({ review });
+    } catch (err) {
+      if (err instanceof ReviewError) return c.json({ error: err.message }, err.status);
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 503);
     }
   });

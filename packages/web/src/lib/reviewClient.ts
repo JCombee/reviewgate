@@ -13,7 +13,9 @@ export interface ReviewApi {
   acceptSuggestion: (id: string, body?: string) => Promise<void>;
   dismissSuggestion: (id: string) => Promise<void>;
   reopenSuggestion: (id: string) => Promise<void>;
-  chat: (message: string) => Promise<void>;
+  chat: (chatId: string, message: string) => Promise<void>;
+  createChat: (title?: string, model?: string | null) => Promise<void>;
+  setChatModel: (chatId: string, model: string | null) => Promise<void>;
   restartPass: () => Promise<void>;
 }
 
@@ -55,7 +57,13 @@ export function createReviewApi(ctx: Ctx, onReview: (review: Review) => void): R
       run(`/suggestions/${id}/accept`, "POST", body === undefined ? {} : { body }),
     dismissSuggestion: (id) => run(`/suggestions/${id}/dismiss`, "POST", {}),
     reopenSuggestion: (id) => run(`/suggestions/${id}/reopen`, "POST", {}),
-    chat: (message) => run("/chat", "POST", { message }),
+    chat: (chatId, message) => run(`/chats/${chatId}/messages`, "POST", { message }),
+    createChat: (title, model) =>
+      run("/chats", "POST", {
+        ...(title === undefined ? {} : { title }),
+        ...(model === undefined ? {} : { model }),
+      }),
+    setChatModel: (chatId, model) => run(`/chats/${chatId}`, "PATCH", { model }),
     restartPass: async () => {
       // The pass answers immediately and delivers its findings over SSE afterwards.
       await fetch(`/api/review/${ctx.id}/pass`, {
@@ -68,8 +76,8 @@ export function createReviewApi(ctx: Ctx, onReview: (review: Review) => void): R
 
 export interface ReviewEventHandlers {
   onReview: (review: Review) => void;
-  /** One piece of an answer that is still streaming. */
-  onChatToken?: (text: string) => void;
+  /** One piece of an answer that is still streaming, tagged with the chat it belongs to. */
+  onChatToken?: (chatId: string, text: string) => void;
   onPass?: (status: PassStatus) => void;
 }
 
@@ -91,7 +99,7 @@ export function subscribeToReview(ctx: Ctx, handlers: ReviewEventHandlers): () =
       return;
     }
     if (event.type === "review") handlers.onReview(event.review);
-    else if (event.type === "chat-token") handlers.onChatToken?.(event.text);
+    else if (event.type === "chat-token") handlers.onChatToken?.(event.chatId, event.text);
     else if (event.type === "pass") handlers.onPass?.(event.status);
   };
 

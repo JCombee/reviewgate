@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import { TestRepo } from "../git/testRepo.js";
 import { addComment } from "./mutations.js";
@@ -120,5 +121,84 @@ describe("ReviewStore", () => {
 
     const { review: next } = await store.findOrCreate(input);
     expect(next.id).not.toBe(first.id);
+  });
+
+  it("initializes chats: [] for a brand-new review", async () => {
+    const { store } = await storeInTempRepo();
+    const { review } = await store.findOrCreate(input);
+    expect(review.chats).toEqual([]);
+  });
+
+  describe("legacy chat migration", () => {
+    async function writeLegacy(
+      store: ReviewStore,
+      body: Record<string, unknown>,
+    ): Promise<string> {
+      const id = "legacy-review";
+      await fs.mkdir(store.dir, { recursive: true });
+      await fs.writeFile(store.fileFor(id), JSON.stringify({ id, ...body }), "utf8");
+      return id;
+    }
+
+    const base = {
+      repoRoot: "/repo",
+      branch: "main",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      rounds: [],
+      comments: [],
+      suggestions: [],
+      status: "open",
+    };
+
+    it("migrates a legacy chat array into a single named chat", async () => {
+      const { store } = await storeInTempRepo();
+      const legacyMessages = [{ id: "m1", role: "user", body: "hi", at: "2026-01-01T00:00:00.000Z" }];
+      const id = await writeLegacy(store, { ...base, chat: legacyMessages });
+
+      const loaded = await store.load(id);
+      expect(loaded?.chats).toHaveLength(1);
+      expect(loaded?.chats[0]).toMatchObject({
+        title: "Chat",
+        model: null,
+        messages: legacyMessages,
+        createdAt: base.createdAt,
+      });
+      expect(loaded?.chats[0]?.id).toBeTruthy();
+      expect((loaded as unknown as { chat?: unknown }).chat).toBeUndefined();
+    });
+
+    it("migrates an empty legacy chat array to chats: []", async () => {
+      const { store } = await storeInTempRepo();
+      const id = await writeLegacy(store, { ...base, chat: [] });
+
+      const loaded = await store.load(id);
+      expect(loaded?.chats).toEqual([]);
+    });
+
+    it("leaves an already-migrated chats array untouched", async () => {
+      const { store } = await storeInTempRepo();
+      const chats = [
+        {
+          id: "c1",
+          title: "Chat",
+          model: null,
+          messages: [],
+          createdAt: base.createdAt,
+        },
+      ];
+      const id = await writeLegacy(store, { ...base, chats });
+
+      const loaded = await store.load(id);
+      expect(loaded?.chats).toEqual(chats);
+    });
+
+    it("defaults to chats: [] when neither chat nor chats is present", async () => {
+      const { store } = await storeInTempRepo();
+      const id = await writeLegacy(store, { ...base });
+
+      const loaded = await store.load(id);
+      expect(loaded?.chats).toEqual([]);
+    });
   });
 });

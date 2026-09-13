@@ -32,7 +32,7 @@ const emptyReview = (): Review => ({
   ],
   comments: [],
   suggestions: [],
-  chat: [],
+  chats: [],
   status: "open",
 });
 

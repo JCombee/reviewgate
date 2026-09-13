@@ -9,6 +9,7 @@ import {
   loadConfig,
   openComments,
   reanchorComments,
+  ReviewError,
   ReviewStore,
   splitLines,
   suggestionCap,
@@ -25,13 +26,14 @@ import {
   type Suggestion,
 } from "@reviewgate/core";
 import type {
+  Chat,
   FileDetail,
   FileSummary,
   PassStatus,
   ReviewEvent,
   ReviewSummary,
 } from "@reviewgate/core/api";
-import { AgentUnavailable, readProjectDocs, ReviewAgent } from "./agent.js";
+import { readProjectDocs, ReviewAgent, type AgentContext } from "./agent.js";
 import { Highlighting, Palette } from "./highlight.js";
 
 export interface SessionInput {
@@ -59,7 +61,11 @@ export class Session {
   #detailCache = new Map<number, FileDetail>();
   #listeners = new Set<Listener>();
   #review: Review;
-  #agent: ReviewAgent | null = null;
+  /** One independent assistant conversation per chat id, created lazily on first use. */
+  #agents = new Map<string, ReviewAgent>();
+  #patch: string;
+  #transcriptPath: string | null;
+  #projectDocs: string;
   #passStatus: PassStatus = { state: "idle" };
 
   private constructor(
@@ -73,8 +79,14 @@ export class Session {
     readonly store: ReviewStore,
     readonly config: ReviewGateConfig,
     review: Review,
+    patch: string,
+    transcriptPath: string | null,
+    projectDocs: string,
   ) {
     this.#review = review;
+    this.#patch = patch;
+    this.#transcriptPath = transcriptPath;
+    this.#projectDocs = projectDocs;
   }
 
   static async create(input: SessionInput, highlighting: Highlighting): Promise<Session> {
@@ -114,13 +126,10 @@ export class Session {
       store,
       config,
       anchored,
-    );
-    session.#agent = new ReviewAgent({
-      repoRoot: info.root,
       patch,
-      transcriptPath: input.transcriptPath ?? null,
-      projectDocs: await readProjectDocs(info.root),
-    });
+      input.transcriptPath ?? null,
+      await readProjectDocs(info.root),
+    );
     return session;
   }
 
@@ -206,44 +215,118 @@ export class Session {
     return this.#passStatus;
   }
 
-  #agentOrThrow(): ReviewAgent {
-    if (!this.#agent) throw new AgentUnavailable("the reviewer assistant is not available");
-    return this.#agent;
+  /** Builds the context every `ReviewAgent` in this session shares. */
+  #agentContext(): AgentContext {
+    return {
+      repoRoot: this.repoRoot,
+      patch: this.#patch,
+      transcriptPath: this.#transcriptPath,
+      projectDocs: this.#projectDocs,
+    };
   }
 
   /**
-   * One question in the chat panel. The answer streams to the UI token by token; only
-   * once it is complete does it land in the review, so an aborted answer leaves no
-   * half message behind.
+   * The chat's own `ReviewAgent`, created lazily on first use so each chat gets its
+   * own, independent SDK session (§9 extended to multiple chats). Throws for a
+   * `chatId` that is not (or no longer) in `review.chats` — it never silently creates
+   * one.
+   *
+   * The SDK only takes `model` at `query()` time via `Options`; there is no way to
+   * change a live session's model mid-stream. So a chat's model change is honored by
+   * discarding the cached agent and starting a fresh SDK session under the new model
+   * the next time this chat is used — trading that chat's `resume` continuity (not its
+   * persisted `messages`, which live on the `Review`) for the change actually taking
+   * effect (Story 2.1, AC #4).
    */
-  async chat(message: string): Promise<Review> {
+  #agentFor(chatId: string): ReviewAgent {
+    const chat = this.#review.chats.find((c) => c.id === chatId);
+    if (!chat) throw new ReviewError(`unknown chat: ${chatId}`, 404);
+
+    const cached = this.#agents.get(chatId);
+    if (cached && cached.context.model === chat.model) return cached;
+
+    const agent = new ReviewAgent({ ...this.#agentContext(), model: chat.model });
+    this.#agents.set(chatId, agent);
+    return agent;
+  }
+
+  /** Returns `next.chats` with one message appended to the chat with this id. */
+  #withMessage(chatId: string, role: "user" | "assistant", body: string): Review {
+    return {
+      ...this.#review,
+      chats: this.#review.chats.map((c) =>
+        c.id === chatId
+          ? {
+              ...c,
+              messages: [
+                ...c.messages,
+                { id: randomUUID(), role, body, at: new Date().toISOString() },
+              ],
+            }
+          : c,
+      ),
+    };
+  }
+
+  /**
+   * One question in one chat panel. The answer streams to the UI token by token; only
+   * once it is complete does it land in the review, so an aborted answer leaves no
+   * half message behind. Independent chats never share context or an SDK session.
+   */
+  async chat(chatId: string, message: string): Promise<Review> {
     const trimmed = message.trim();
     if (trimmed === "") throw new Error("an empty question yields nothing");
 
-    const agent = this.#agentOrThrow();
-    const withQuestion: Review = {
-      ...this.#review,
-      chat: [
-        ...this.#review.chat,
-        { id: randomUUID(), role: "user", body: trimmed, at: new Date().toISOString() },
-      ],
-    };
+    // Throws for an unknown chatId before anything is appended (AC #4).
+    const agent = this.#agentFor(chatId);
+
+    const withQuestion = this.#withMessage(chatId, "user", trimmed);
     await this.commit(withQuestion);
 
-    // The first question carries the context; after that the SDK resumes the session.
+    // The first question in *this* chat carries the context; after that the SDK
+    // resumes that chat's own session.
+    const thisChat = withQuestion.chats.find((c) => c.id === chatId);
     const prompt =
-      this.#review.chat.length <= 1
+      (thisChat?.messages.length ?? 0) <= 1
         ? `${await agent.contextPrompt()}\n\n# Question\n\n${trimmed}`
         : trimmed;
 
-    const answer = await agent.ask(prompt, (text) => this.#emit({ type: "chat-token", text }));
+    const answer = await agent.ask(prompt, (text) =>
+      this.#emit({ type: "chat-token", chatId, text }),
+    );
 
+    return this.commit(this.#withMessage(chatId, "assistant", answer));
+  }
+
+  /** Starts a new, empty chat thread and persists it (§9 extended to multiple chats). */
+  async createChat(title?: string, model?: string | null): Promise<Review> {
+    const chat: Chat = {
+      id: randomUUID(),
+      title: title?.trim() ? title.trim() : "Chat",
+      model: model ?? null,
+      messages: [],
+      createdAt: new Date().toISOString(),
+    };
+    return this.commit({ ...this.#review, chats: [...this.#review.chats, chat] });
+  }
+
+  /**
+   * Sets which model answers a chat from here on (§9 extended to per-chat models,
+   * Story 2.2). Only updates the persisted `Chat.model`; it does not touch the
+   * `#agents` cache directly — `#agentFor` already compares a chat's `model` against
+   * its cached agent's on every call (Story 2.1) and transparently starts a fresh SDK
+   * session under the new model the next time this chat is used. That keeps this
+   * method a plain, testable "read `#review`, produce the next `Review`, commit it"
+   * mutation, like every other one in this class.
+   */
+  async setChatModel(chatId: string, model: string | null): Promise<Review> {
+    if (!this.#review.chats.some((c) => c.id === chatId)) {
+      throw new ReviewError(`unknown chat: ${chatId}`, 404);
+    }
+    const normalized = model && model.trim() !== "" ? model.trim() : null;
     return this.commit({
       ...this.#review,
-      chat: [
-        ...this.#review.chat,
-        { id: randomUUID(), role: "assistant", body: answer, at: new Date().toISOString() },
-      ],
+      chats: this.#review.chats.map((c) => (c.id === chatId ? { ...c, model: normalized } : c)),
     });
   }
 
@@ -253,15 +336,14 @@ export class Session {
    */
   async runReviewPass(): Promise<void> {
     if (this.#passStatus.state === "running") return;
-    if (!this.#agent) {
-      this.#setPassStatus({ state: "failed", error: "the reviewer assistant is not available" });
-      return;
-    }
 
     this.#setPassStatus({ state: "running" });
     try {
+      // A one-off agent for this pass alone: it never touches `review.chats` and
+      // shares no SDK session with any chat (AC #5).
+      const agent = new ReviewAgent(this.#agentContext());
       const cap = suggestionCap(this.diff.changedLines, this.config.autoReviewCap);
-      const findings = await this.#agent.reviewPass(cap, this.#review);
+      const findings = await agent.reviewPass(cap, this.#review);
       const result = addSuggestions(this.#review, findings, {
         cap,
         dedupe: this.config.dedupe,

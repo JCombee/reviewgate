@@ -36,7 +36,7 @@ const review = (suggestions: Suggestion[] = []): Review => ({
   ],
   comments: [],
   suggestions,
-  chat: [],
+  chats: [],
   status: "open",
 });
 

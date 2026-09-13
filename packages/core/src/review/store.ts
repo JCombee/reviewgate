@@ -2,7 +2,39 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { ReviewScope } from "../types.js";
-import type { Review, Round } from "./types.js";
+import type { Chat, ChatMessage, Review, Round } from "./types.js";
+
+/**
+ * Migrates a review JSON blob (parsed but not yet type-checked) from the legacy
+ * `chat: ChatMessage[]` shape to the current `chats: Chat[]` shape, in place on read.
+ *
+ * Idempotent: a review that already has `chats` is returned unchanged. A review with
+ * neither `chat` nor `chats` (defensive — should not happen on disk) defaults to
+ * `chats: []` rather than throwing.
+ */
+export function migrateLegacyChat(raw: unknown): Review {
+  const review = raw as Review & { chat?: ChatMessage[] };
+  if (Array.isArray(review.chats)) {
+    return review as Review;
+  }
+
+  const legacy = review.chat;
+  const chats: Chat[] =
+    legacy && legacy.length > 0
+      ? [
+          {
+            id: randomUUID(),
+            title: "Chat",
+            model: null,
+            messages: legacy,
+            createdAt: review.createdAt,
+          },
+        ]
+      : [];
+
+  const { chat: _chat, ...rest } = review;
+  return { ...rest, chats } as Review;
+}
 
 /**
  * Reviews on disk. No database — JSON files in `.git/reviewgate/reviews/`, a path
@@ -22,7 +54,7 @@ export class ReviewStore {
   async load(id: string): Promise<Review | null> {
     try {
       const raw = await fs.readFile(this.fileFor(id), "utf8");
-      return JSON.parse(raw) as Review;
+      return migrateLegacyChat(JSON.parse(raw));
     } catch {
       return null;
     }
@@ -114,7 +146,7 @@ export class ReviewStore {
       rounds: [this.#newRound(1, input)],
       comments: [],
       suggestions: [],
-      chat: [],
+      chats: [],
       status: "open",
     });
     return { review, newRound: false };
