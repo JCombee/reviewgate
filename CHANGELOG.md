@@ -8,6 +8,17 @@ Entries describe what changed for someone using the gate, not which files moved.
 
 ## [Unreleased]
 
+### Added
+
+- The panel on the right now holds a second tab: every comment in the review in one
+  list, filtered by open, resolved or outdated and grouped per file. Clicking one takes
+  you to the thread in the diff — it unfolds a collapsed file and opens the outdated
+  section if that is where the comment lives.
+- `npm run install:local` compiles the working tree and installs it over the reviewgate
+  you already have, for anyone working on ReviewGate itself. With `--wrapper` it skips
+  the compiler and installs a launcher that runs the checkout — the way in on WSL, where
+  bun cannot compile a checkout that lives on a Windows drive.
+
 ### Fixed
 
 - A build from source now serves the web assets next to it, so `npm run build:web` is

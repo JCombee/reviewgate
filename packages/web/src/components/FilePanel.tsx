@@ -34,6 +34,11 @@ export interface FilePanelProps {
   api: ReviewApi;
   registerRef: (index: number, el: HTMLElement | null) => void;
   onDiscuss: (suggestion: Suggestion) => void;
+  /**
+   * Bumped when a jump from the comment list lands in this file: a collapsed or
+   * not-yet-loaded file has to open, or there is nothing to scroll to.
+   */
+  reveal: number | null;
 }
 
 export function FilePanel({
@@ -44,6 +49,7 @@ export function FilePanel({
   api,
   registerRef,
   onDiscuss,
+  reveal,
 }: FilePanelProps) {
   const isLarge = file.additions + file.deletions > LARGE_FILE_LINES;
   const [open, setOpen] = useState(!isLarge);
@@ -85,6 +91,12 @@ export function FilePanel({
     io.observe(el);
     return () => io.disconnect();
   }, [visible]);
+
+  useEffect(() => {
+    if (reveal === null) return;
+    setVisible(true);
+    setOpen(true);
+  }, [reveal]);
 
   useEffect(() => {
     if (!visible || !open || detail || error) return;

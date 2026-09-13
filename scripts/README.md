@@ -69,9 +69,66 @@ an hour per IP. Both scripts use `GITHUB_TOKEN`, `GH_TOKEN` or `gh auth token` w
 one is around, and fall back to an anonymous request when the token turns out to be
 stale.
 
+## Installing what you have checked out
+
+`install-local.mjs` is the other direction: it compiles the working tree and puts it
+over the reviewgate you already have, so the next commit meets the code in front of
+you rather than the newest release.
+
+```bash
+npm run install:local
+```
+
+One script for every platform, and Node rather than a shell: whoever has a checkout has
+Node, and a single file cannot drift between a `.sh` and a `.ps1` half the way a pair
+does. It needs [bun](https://bun.sh) — the same compiler `build-binaries.mjs` uses.
+
+Without arguments it replaces the binary your PATH resolves `reviewgate` to, and picks
+the target to match: on WSL that is the Windows install under
+`%LOCALAPPDATA%\Programs\reviewgate`, because bash never resolves `reviewgate.exe`
+under that name but Windows still runs it. With nothing installed yet it falls back to
+the directory the native installer uses.
+
+| Flag | Does |
+| --- | --- |
+| `--dir <path>` | install somewhere else instead of over the current install |
+| `--target <name>` | a specific bun target, e.g. `bun-windows-x64` |
+| `--version <v>` | the version to stamp (default `<package version>-local.<sha>`) |
+| `--wrapper` | install a launcher for this checkout instead of compiling |
+| `--dry-run` | print the target, the version and the destination, then stop |
+
+Pass them through npm with a `--` in between: `npm run install:local -- --dry-run`.
+
+### When bun will not compile
+
+A checkout on a Windows drive cannot be compiled from inside WSL: bun fails with
+`EINVAL opening root directory "/mnt/d/..."`. Compile it from PowerShell, or skip the
+compiler:
+
+```bash
+npm run install:local -- --wrapper
+```
+
+That builds the checkout and installs a three-line launcher that runs it, so `reviewgate`
+is the code in your working tree from then on — rebuild and it is live, no reinstall.
+It needs Node at run time, reports `0.0.0-dev` (a version is compiled in, and a source
+run has none), and `reviewgate update` leaves it alone: it refuses to replace a build
+from source.
+
+It runs `npm run build` and stops there. The embed step is for binaries only: it fills
+a file that is a stub on purpose, and a source build reads the UI from
+`packages/web/dist` anyway.
+
+The build carries a `-local.<sha>` version so `reviewgate --version` says which one you
+are on. It counts as the released version it was built from, so `reviewgate update`
+will replace it as soon as a newer release exists — a local install is a thing you redo,
+not a thing you keep. The plugin is untouched: it runs `reviewgate hook` and does not
+care where the binary came from.
+
 ## The other scripts
 
 | Script | Does |
 | --- | --- |
 | `embed-web.mjs` | inlines `packages/web/dist` into the server, so a binary carries the UI |
 | `build-binaries.mjs` | compiles the per-platform binaries with `bun build --compile` |
+| `install-local.mjs` | compiles the working tree and installs it over your current one |

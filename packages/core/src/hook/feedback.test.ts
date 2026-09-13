@@ -37,7 +37,7 @@ const review = (over: Partial<Review> = {}): Review => ({
   ],
   comments: [],
   suggestions: [],
-  chat: [],
+  chats: [],
   status: "open",
   ...over,
 });

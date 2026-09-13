@@ -15,10 +15,13 @@ export function Overview({
   review,
   api,
   onDiscuss,
+  revealOutdated,
 }: {
   review: Review;
   api: ReviewApi;
   onDiscuss: (suggestion: Suggestion) => void;
+  /** Bumped when a jump from the comment list lands on an outdated comment. */
+  revealOutdated: number | null;
 }) {
   const round = review.rounds[review.rounds.length - 1];
   const original = round?.commitMessage ?? null;
@@ -115,7 +118,7 @@ export function Overview({
       ))}
       <DismissedSuggestions suggestions={dismissedSuggestions} api={api} onDiscuss={onDiscuss} />
 
-      <OutdatedComments comments={outdated} api={api} />
+      <OutdatedComments comments={outdated} api={api} reveal={revealOutdated} />
 
       {adding !== null ? (
         <CommentForm
@@ -147,8 +150,22 @@ export function Overview({
  * Comments whose line can no longer be found in this round (§5). They stay visible —
  * you want to see what you remarked on earlier — but no longer count as open.
  */
-function OutdatedComments({ comments, api }: { comments: readonly Comment[]; api: ReviewApi }) {
+function OutdatedComments({
+  comments,
+  api,
+  reveal,
+}: {
+  comments: readonly Comment[];
+  api: ReviewApi;
+  reveal: number | null;
+}) {
   const [open, setOpen] = useState(false);
+
+  // A jump from the comment list has to be able to reach a thread in here.
+  useEffect(() => {
+    if (reveal !== null) setOpen(true);
+  }, [reveal]);
+
   if (comments.length === 0) return null;
 
   return (

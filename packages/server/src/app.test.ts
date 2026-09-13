@@ -1,6 +1,7 @@
 import { diffHash, NodeGitClient, readApproval, TestRepo } from "@reviewgate/core";
 import type { Review, ReviewSummary } from "@reviewgate/core/api";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ReviewAgent } from "./agent.js";
 import { createApp, SessionStore } from "./app.js";
 import { Session } from "./session.js";
 
@@ -212,6 +213,158 @@ describe("commit message", () => {
     });
     const { review } = await json<{ review: Review }>(res);
     expect(review.rounds[0]?.editedCommitMessage).toBe("fix(service): invalidate tags");
+  });
+});
+
+describe("chat", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("creates a chat that appears in review.chats", async () => {
+    const res = await post(`/api/review/${session.id}/chats`, { title: "Q&A" });
+    expect(res.status).toBe(200);
+    const { review } = await json<{ review: Review }>(res);
+    expect(review.chats).toHaveLength(1);
+    expect(review.chats[0]).toMatchObject({ title: "Q&A", model: null, messages: [] });
+  });
+
+  it("defaults the chat title and model when omitted", async () => {
+    const res = await post(`/api/review/${session.id}/chats`, {});
+    const { review } = await json<{ review: Review }>(res);
+    expect(review.chats[0]).toMatchObject({ title: "Chat", model: null });
+  });
+
+  it("posts a message to a chat and appends it to that chat's messages", async () => {
+    vi.spyOn(ReviewAgent.prototype, "ask").mockResolvedValue("42");
+    const created = await json<{ review: Review }>(
+      await post(`/api/review/${session.id}/chats`, {}),
+    );
+    const chatId = created.review.chats[0]?.id as string;
+
+    const res = await post(`/api/review/${session.id}/chats/${chatId}/messages`, {
+      message: "what is the answer?",
+    });
+    expect(res.status).toBe(200);
+    const { review } = await json<{ review: Review }>(res);
+    const chat = review.chats.find((c) => c.id === chatId);
+    expect(chat?.messages.map((m) => m.body)).toEqual(["what is the answer?", "42"]);
+  });
+
+  it("refuses a message without text", async () => {
+    const created = await json<{ review: Review }>(
+      await post(`/api/review/${session.id}/chats`, {}),
+    );
+    const chatId = created.review.chats[0]?.id as string;
+    const res = await post(`/api/review/${session.id}/chats/${chatId}/messages`, {
+      message: " ",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns an error response for an unknown chat id rather than a 500 or silent success", async () => {
+    const res = await post(`/api/review/${session.id}/chats/does-not-exist/messages`, {
+      message: "hi",
+    });
+    expect(res.status).toBe(503);
+    const body = await json<{ error: string }>(res);
+    expect(body.error).toContain("does-not-exist");
+  });
+
+  it("tags the chat-token SSE event with the chat id", async () => {
+    vi.spyOn(ReviewAgent.prototype, "ask").mockImplementation(async function (
+      this: ReviewAgent,
+      _prompt: string,
+      onToken?: (text: string) => void,
+    ) {
+      onToken?.("partial");
+      return "partial";
+    });
+    const created = await json<{ review: Review }>(
+      await post(`/api/review/${session.id}/chats`, {}),
+    );
+    const chatId = created.review.chats[0]?.id as string;
+
+    const eventsRes = await req(`/api/review/${session.id}/events`);
+    const reader = (eventsRes.body as ReadableStream<Uint8Array>).getReader();
+    await reader.read(); // the initial review state
+
+    const chatPromise = post(`/api/review/${session.id}/chats/${chatId}/messages`, {
+      message: "hi",
+    });
+
+    // The stream multiplexes every mutation under the same SSE frame name ("review");
+    // consumers tell events apart by the `type` field in the JSON payload instead.
+    let text = "";
+    for (let i = 0; i < 10 && !text.includes('"type":"chat-token"'); i++) {
+      const chunk = await reader.read();
+      if (chunk.value) text += new TextDecoder().decode(chunk.value);
+    }
+    expect(text).toContain('"type":"chat-token"');
+    expect(text).toContain(chatId);
+
+    await chatPromise;
+    await reader.cancel();
+  });
+});
+
+describe("chat model (Story 2.2)", () => {
+  it("sets a chat's model and reflects it in the returned review", async () => {
+    const created = await json<{ review: Review }>(
+      await post(`/api/review/${session.id}/chats`, {}),
+    );
+    const chatId = created.review.chats[0]?.id as string;
+
+    const res = await req(`/api/review/${session.id}/chats/${chatId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ model: "opus" }),
+    });
+    expect(res.status).toBe(200);
+    const { review } = await json<{ review: Review }>(res);
+    expect(review.chats.find((c) => c.id === chatId)?.model).toBe("opus");
+  });
+
+  it("sets a chat back to Default (null)", async () => {
+    const created = await json<{ review: Review }>(
+      await post(`/api/review/${session.id}/chats`, { model: "opus" }),
+    );
+    const chatId = created.review.chats[0]?.id as string;
+
+    const res = await req(`/api/review/${session.id}/chats/${chatId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ model: null }),
+    });
+    const { review } = await json<{ review: Review }>(res);
+    expect(review.chats.find((c) => c.id === chatId)?.model).toBeNull();
+  });
+
+  it("does not disturb the chat's existing messages", async () => {
+    vi.spyOn(ReviewAgent.prototype, "ask").mockResolvedValue("42");
+    const created = await json<{ review: Review }>(
+      await post(`/api/review/${session.id}/chats`, {}),
+    );
+    const chatId = created.review.chats[0]?.id as string;
+    await post(`/api/review/${session.id}/chats/${chatId}/messages`, { message: "hi" });
+
+    const res = await req(`/api/review/${session.id}/chats/${chatId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ model: "haiku" }),
+    });
+    const { review } = await json<{ review: Review }>(res);
+    const chat = review.chats.find((c) => c.id === chatId);
+    expect(chat?.model).toBe("haiku");
+    expect(chat?.messages.map((m) => m.body)).toEqual(["hi", "42"]);
+    vi.restoreAllMocks();
+  });
+
+  it("returns an error response for an unknown chat id", async () => {
+    const res = await req(`/api/review/${session.id}/chats/does-not-exist`, {
+      method: "PATCH",
+      body: JSON.stringify({ model: "opus" }),
+    });
+    expect(res.status).toBe(404);
+    const body = await json<{ error: string }>(res);
+    expect(body.error).toContain("does-not-exist");
   });
 });
 

@@ -125,6 +125,11 @@ npm link --workspace @reviewgate/cli
 Both give the same `reviewgate hook` command, so the plugin does not care which one
 you have.
 
+Working on ReviewGate itself, with an install already in place? `npm run install:local`
+compiles the checkout and puts it over that install — the same binary the release
+produces, so the next commit meets your changes. It needs [bun](https://bun.sh), takes
+`--dry-run`, and [scripts/README.md](scripts/README.md) covers the rest.
+
 ### Uninstalling
 
 Remove the plugin, then delete the binary:

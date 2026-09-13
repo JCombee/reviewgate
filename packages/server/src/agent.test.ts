@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { parseFindings, summarizeTranscript } from "./agent.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentContext } from "./agent.js";
+import { parseFindings, ReviewAgent, summarizeTranscript } from "./agent.js";
+
+vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
+  query: vi.fn(),
+}));
 
 describe("parseFindings", () => {
   it("reads a plain JSON list", () => {
@@ -80,4 +85,52 @@ describe("summarizeTranscript", () => {
   it("returns an empty string for an empty transcript", () => {
     expect(summarizeTranscript("")).toBe("");
   });
+});
+
+describe("ReviewAgent's SDK options", () => {
+  function baseContext(model?: string | null): AgentContext {
+    return {
+      repoRoot: "/repo",
+      patch: "diff --git a/a.ts b/a.ts",
+      transcriptPath: null,
+      projectDocs: "",
+      ...(model === undefined ? {} : { model }),
+    };
+  }
+
+  async function* successResult() {
+    yield { type: "result", subtype: "success", result: "ok" } as const;
+  }
+
+  beforeEach(async () => {
+    const sdk = await import("@anthropic-ai/claude-agent-sdk");
+    vi.mocked(sdk.query).mockReset().mockReturnValue(successResult());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("includes model when the context has a non-empty one", async () => {
+    const sdk = await import("@anthropic-ai/claude-agent-sdk");
+    const agent = new ReviewAgent(baseContext("claude-opus-4-8"));
+    await agent.ask("hello");
+
+    const call = vi.mocked(sdk.query).mock.calls[0]?.[0] as { options: { model?: string } };
+    expect(call.options.model).toBe("claude-opus-4-8");
+  });
+
+  it.each([[undefined], [null], [""]])(
+    "omits model from the SDK options when the context's model is %p",
+    async (model) => {
+      const sdk = await import("@anthropic-ai/claude-agent-sdk");
+      const agent = new ReviewAgent(baseContext(model));
+      await agent.ask("hello");
+
+      const call = vi.mocked(sdk.query).mock.calls[0]?.[0] as {
+        options: Record<string, unknown>;
+      };
+      expect(call.options).not.toHaveProperty("model");
+    },
+  );
 });
