@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="packages/web/public/favicon.svg" width="40" height="40" valign="bottom" alt="" />&nbsp;ReviewGate
+  <img src="packages/web/public/favicon.svg" width="56" height="56" valign="middle" alt="" />&nbsp;ReviewGate
 </h1>
 
 A local, browser-based code review gate that opens as soon as Claude Code wants to
