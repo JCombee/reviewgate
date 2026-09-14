@@ -67,6 +67,8 @@ export {
 export type { Approval } from "./review/approval.js";
 export { waitForDecision } from "./hook/wait.js";
 export type { WaitOptions, WaitResult } from "./hook/wait.js";
+export { resolveHooksDir, runPreCommitHook } from "./hook/precommit.js";
+export type { PreCommitOutcome } from "./hook/precommit.js";
 
 export {
   acceptSuggestion,

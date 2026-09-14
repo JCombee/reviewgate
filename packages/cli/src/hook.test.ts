@@ -3,7 +3,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { readApproval, ReviewStore, TestRepo, type Review } from "@reviewgate/core";
+import {
+  diffHash,
+  NodeGitClient,
+  readApproval,
+  ReviewStore,
+  TestRepo,
+  type Review,
+} from "@reviewgate/core";
 import { readServerRecord } from "@reviewgate/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -284,6 +291,72 @@ describe("hook — blocking", () => {
     const rounds = review?.rounds ?? [];
     const hash = rounds[rounds.length - 1]?.diffHash ?? "";
     expect(await readApproval(gitDir, hash)).toBeNull();
+  }, 60_000);
+});
+
+describe("hook — pre-commit", () => {
+  /** Writes an executable `pre-commit` hook at the default `.git/hooks` location. */
+  async function writeHook(script: string): Promise<void> {
+    await repo.write(".git/hooks/pre-commit", script);
+    await fs.chmod(repo.abs(".git/hooks/pre-commit"), 0o755);
+  }
+
+  it.skipIf(process.platform === "win32")(
+    "a failing pre-commit hook denies the commit before any review starts",
+    async () => {
+      await stageChange();
+      await writeHook("#!/bin/sh\necho 'lint failed' >&2\nexit 1\n");
+
+      const out = await hookOutput('git commit -m "fix: something"');
+      expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
+      expect(out?.hookSpecificOutput?.permissionDecisionReason).toContain("lint failed");
+
+      const record = await readServerRecord(path.join(repo.root, ".git"));
+      expect(record).toBeNull();
+      const store = new ReviewStore(path.join(repo.root, ".git"));
+      expect(await store.list()).toEqual([]);
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "a pre-commit hook that rewrites a staged file is reflected in the review diff",
+    async () => {
+      await stageChange();
+      // Rewrites the staged file and re-stages it, the way lint-staged/prettier would.
+      await writeHook(
+        "#!/bin/sh\n" +
+          "printf 'export const a = 1;\\nexport const b = 22;\\nexport const c = 3;\\n' > src/service.ts\n" +
+          "git add src/service.ts\n" +
+          "exit 0\n",
+      );
+
+      const hook = runHook('git commit -m "fix: something"');
+      const review = await waitForReview();
+      const round = review.rounds[review.rounds.length - 1];
+
+      // The hook already ran and re-staged by the time the review exists, so the diff
+      // decide() captured (identified by the round's diffHash) has to be the one that
+      // includes the hook's rewrite, not the pre-hook staged content.
+      const git = await NodeGitClient.open(repo.root);
+      const patch = await git.rawDiff("staged", { context: 5 });
+      expect(patch).toContain("export const c = 3;");
+      expect(round?.diffHash).toBe(diffHash(patch));
+
+      await decide("approve");
+      await hook.done;
+    },
+    60_000,
+  );
+
+  it("a repo with no pre-commit hook behaves exactly as before (regression)", async () => {
+    await stageChange();
+    const hook = runHook('git commit -m "fix: something"');
+    await waitForReview();
+    await decide("approve", "fine");
+
+    const { stdout } = await hook.done;
+    const out = JSON.parse(stdout) as HookOutput;
+    expect(out.hookSpecificOutput?.permissionDecision).toBe("allow");
   }, 60_000);
 });
 
