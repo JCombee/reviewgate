@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="packages/web/public/favicon.svg" width="40" height="40" align="middle" alt="" />&nbsp;&nbsp;ReviewGate
+  <img src="packages/web/public/favicon.svg" width="40" height="40" valign="bottom" alt="" />&nbsp;ReviewGate
 </h1>
 
 A local, browser-based code review gate that opens as soon as Claude Code wants to
@@ -19,13 +19,13 @@ beyond what the assistant itself asks Claude.
 A PreToolUse hook intercepts every `Bash` command, recognises a `git commit`, and
 blocks synchronously until a decision is made in the UI:
 
-| Decision in the UI | Hook output | Effect |
-| --- | --- | --- |
-| Approve | `permissionDecision: "allow"` | the command simply runs |
-| Request changes | `deny` plus all feedback in `permissionDecisionReason` | Claude sees the review as feedback and starts fixing |
-| Timeout | `deny` with a short explanation | Claude waits for you and does not commit |
+| Decision in the UI | Hook output                                            | Effect                                               |
+| ------------------ | ------------------------------------------------------ | ---------------------------------------------------- |
+| Approve            | `permissionDecision: "allow"`                          | the command simply runs                              |
+| Request changes    | `deny` plus all feedback in `permissionDecisionReason` | Claude sees the review as feedback and starts fixing |
+| Timeout            | `deny` with a short explanation                        | Claude waits for you and does not commit             |
 
-A `deny` from a PreToolUse hook holds in *every* permission mode, including under
+A `deny` from a PreToolUse hook holds in _every_ permission mode, including under
 `--dangerously-skip-permissions`. The gate cannot be bypassed by the agent.
 
 ## Installation
@@ -63,13 +63,13 @@ Flags, environment variables and the full list of what the script touches are in
 
 ### Platforms
 
-| Platform | Asset |
-| --- | --- |
-| macOS, Apple silicon | `reviewgate-darwin-arm64` |
-| macOS, Intel | `reviewgate-darwin-x64` |
-| Linux, x86-64 | `reviewgate-linux-x64` |
-| Linux, arm64 | `reviewgate-linux-arm64` |
-| Windows, x86-64 | `reviewgate-win32-x64.exe` |
+| Platform             | Asset                      |
+| -------------------- | -------------------------- |
+| macOS, Apple silicon | `reviewgate-darwin-arm64`  |
+| macOS, Intel         | `reviewgate-darwin-x64`    |
+| Linux, x86-64        | `reviewgate-linux-x64`     |
+| Linux, arm64         | `reviewgate-linux-arm64`   |
+| Windows, x86-64      | `reviewgate-win32-x64.exe` |
 
 Windows on ARM gets the x64 binary and runs it under emulation. Every asset is
 published with a `.sha256` beside it on the
@@ -182,9 +182,9 @@ reviewgate hook             PreToolUse hook: reads hook JSON from stdin and bloc
 - **Questions.** Tick "This is a question". Questions arrive in the feedback with a `?`,
   so Claude answers them instead of fixing blindly.
 - **The commit message** is both editable and commentable, independently of each other:
-  set it right yourself, *or* ask Claude to revise it, or both.
+  set it right yourself, _or_ ask Claude to revise it, or both.
 - **Suggestions.** As soon as the screen opens, a read-only assistant does a review pass
-  and places its findings as *suggestions*, not as comments. They do not count and do
+  and places its findings as _suggestions_, not as comments. They do not count and do
   not go to Claude until you accept them. Dismissed suggestions stay visible and do not
   come back in a later round.
 - **The conversation** next to the diff answers questions about the change. The
@@ -195,13 +195,13 @@ reviewgate hook             PreToolUse hook: reads hook JSON from stdin and bloc
 
 ### Keyboard
 
-| Key | Does |
-| --- | --- |
-| `j` / `k` | next / previous hunk |
-| `n` / `p` | next / previous file |
-| `u` | switch between unified and split |
-| `⌘↵` | send (a comment or a question) |
-| `⌘⇧↵` | perform the primary action |
+| Key       | Does                             |
+| --------- | -------------------------------- |
+| `j` / `k` | next / previous hunk             |
+| `n` / `p` | next / previous file             |
+| `u`       | switch between unified and split |
+| `⌘↵`      | send (a comment or a question)   |
+| `⌘⇧↵`     | perform the primary action       |
 
 ## Configuration
 
@@ -219,28 +219,28 @@ reviewgate hook             PreToolUse hook: reads hook JSON from stdin and bloc
 }
 ```
 
-| Key | Meaning |
-| --- | --- |
-| `timeoutMs` | how long the hook blocks at most |
-| `minLines` | diffs smaller than this go through unreviewed; 0 turns it off |
-| `ignore` | paths that do not count; `**` spans directories, `*` stays inside one segment |
-| `autoOpen` | open the browser automatically |
-| `autoReview` | `false` turns the automatic pass off; an object sets its bounds |
-| `dedupe` | thresholds for recognising repeated suggestions |
-| `theme` | `system`, `light` or `dark` |
+| Key          | Meaning                                                                       |
+| ------------ | ----------------------------------------------------------------------------- |
+| `timeoutMs`  | how long the hook blocks at most                                              |
+| `minLines`   | diffs smaller than this go through unreviewed; 0 turns it off                 |
+| `ignore`     | paths that do not count; `**` spans directories, `*` stays inside one segment |
+| `autoOpen`   | open the browser automatically                                                |
+| `autoReview` | `false` turns the automatic pass off; an object sets its bounds               |
+| `dedupe`     | thresholds for recognising repeated suggestions                               |
+| `theme`      | `system`, `light` or `dark`                                                   |
 
 A broken or unreadable config yields the defaults. A mistake in the configuration must
 not block the work, at most keep it from being reviewed the way it was meant to be.
 
 ### Environment variables
 
-| Variable | Does |
-| --- | --- |
-| `REVIEWGATE_SKIP=1` | skip the gate entirely |
-| `REVIEWGATE_TIMEOUT_MS` | overrides `timeoutMs` |
-| `REVIEWGATE_NO_OPEN=1` | do not open the browser |
-| `REVIEWGATE_AUTO_REVIEW=0` | turn the automatic pass off |
-| `REVIEWGATE_CLAUDE_PATH` | the `claude` executable the assistant should use |
+| Variable                   | Does                                             |
+| -------------------------- | ------------------------------------------------ |
+| `REVIEWGATE_SKIP=1`        | skip the gate entirely                           |
+| `REVIEWGATE_TIMEOUT_MS`    | overrides `timeoutMs`                            |
+| `REVIEWGATE_NO_OPEN=1`     | do not open the browser                          |
+| `REVIEWGATE_AUTO_REVIEW=0` | turn the automatic pass off                      |
+| `REVIEWGATE_CLAUDE_PATH`   | the `claude` executable the assistant should use |
 
 The chat panel and the automatic pass run through the Claude Code CLI on your machine.
 ReviewGate looks for it on your `PATH` and in the places the native installer uses; set
@@ -251,14 +251,14 @@ says so and the rest of the review carries on as usual.
 
 Everything under `.git/reviewgate/`, a path that is already outside version control:
 
-| File | Contents |
-| --- | --- |
-| `reviews/<id>.json` | the review: rounds, comments, suggestions, conversation |
-| `approved/<diffHash>.json` | proof that *this* diff was approved; lapses after 24 hours |
-| `server.json` | port, pid and admin token of the running server |
-| `COMMIT_EDITMSG` | the commit message you adjusted |
-| `hook.log` | failures inside the hook |
-| `dedupe.log` | automatically dismissed suggestions with their similarity score |
+| File                       | Contents                                                        |
+| -------------------------- | --------------------------------------------------------------- |
+| `reviews/<id>.json`        | the review: rounds, comments, suggestions, conversation         |
+| `approved/<diffHash>.json` | proof that _this_ diff was approved; lapses after 24 hours      |
+| `server.json`              | port, pid and admin token of the running server                 |
+| `COMMIT_EDITMSG`           | the commit message you adjusted                                 |
+| `hook.log`                 | failures inside the hook                                        |
+| `dedupe.log`               | automatically dismissed suggestions with their similarity score |
 
 ## Development
 
