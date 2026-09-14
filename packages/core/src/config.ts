@@ -18,8 +18,6 @@ export interface ReviewGateConfig {
   autoReview: boolean;
   /** Bounds on the number of suggestions (§9). */
   autoReviewCap: { perLines: number; min: number; max: number };
-  /** Thresholds for duplicate detection (§9). */
-  dedupe: { overlapping: number; anywhere: number };
   theme: "system" | "light" | "dark";
 }
 
@@ -41,7 +39,6 @@ export const DEFAULT_CONFIG: ReviewGateConfig = {
   autoOpen: true,
   autoReview: true,
   autoReviewCap: { perLines: 25, min: 2, max: 20 },
-  dedupe: { overlapping: 0.6, anywhere: 0.8 },
   theme: "system",
 };
 
@@ -93,16 +90,6 @@ export function mergeConfig(parsed: unknown): ReviewGateConfig {
         DEFAULT_CONFIG.autoReviewCap.max,
       ),
     },
-    dedupe: {
-      overlapping: ratio(
-        (c["dedupe"] as Record<string, unknown> | undefined)?.["overlapping"],
-        DEFAULT_CONFIG.dedupe.overlapping,
-      ),
-      anywhere: ratio(
-        (c["dedupe"] as Record<string, unknown> | undefined)?.["anywhere"],
-        DEFAULT_CONFIG.dedupe.anywhere,
-      ),
-    },
     theme:
       c["theme"] === "light" || c["theme"] === "dark" || c["theme"] === "system"
         ? c["theme"]
@@ -129,10 +116,6 @@ function positiveNumber(value: unknown, fallback: number): number {
 
 function nonNegativeNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
-}
-
-function ratio(value: unknown, fallback: number): number {
-  return typeof value === "number" && value >= 0 && value <= 1 ? value : fallback;
 }
 
 function boolean(value: unknown, fallback: boolean): boolean {

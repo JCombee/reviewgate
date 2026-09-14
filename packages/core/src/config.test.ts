@@ -34,11 +34,10 @@ describe("mergeConfig", () => {
     expect(c.autoReviewCap).toMatchObject({ perLines: 50, max: 5, min: 2 });
   });
 
-  it("keeps dedupe thresholds between zero and one", () => {
-    expect(mergeConfig({ dedupe: { overlapping: 0.4, anywhere: 9 } }).dedupe).toEqual({
-      overlapping: 0.4,
-      anywhere: DEFAULT_CONFIG.dedupe.anywhere,
-    });
+  it("ignores an unrecognized dedupe key without erroring, leaving sibling keys intact", () => {
+    const c = mergeConfig({ dedupe: { overlapping: 0.4, anywhere: 0.9 }, minLines: 20 });
+    expect(c).not.toHaveProperty("dedupe");
+    expect(c.minLines).toBe(20);
   });
 });
 

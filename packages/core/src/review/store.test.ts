@@ -200,5 +200,28 @@ describe("ReviewStore", () => {
       const loaded = await store.load(id);
       expect(loaded?.chats).toEqual([]);
     });
+
+    it("loads an old review file with a dismissedReason: auto_duplicate suggestion without throwing", async () => {
+      const { store } = await storeInTempRepo();
+      const legacySuggestion = {
+        id: "s1",
+        round: 1,
+        scope: "line",
+        body: "this fetch has no error handling",
+        severity: "consideration",
+        status: "dismissed",
+        dismissedReason: "auto_duplicate",
+        duplicateOf: "old-id",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      };
+      const id = await writeLegacy(store, { ...base, suggestions: [legacySuggestion] });
+
+      const loaded = await store.load(id);
+      expect(loaded?.suggestions).toHaveLength(1);
+      expect(loaded?.suggestions[0]).toMatchObject({
+        dismissedReason: "auto_duplicate",
+        duplicateOf: "old-id",
+      });
+    });
   });
 });

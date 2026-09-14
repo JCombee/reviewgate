@@ -43,7 +43,7 @@ export interface Comment {
 
 export type SuggestionStatus = "pending" | "accepted" | "dismissed";
 export type Severity = "blocker" | "consideration" | "nit";
-export type DismissedReason = "user" | "auto_duplicate" | "round_closed";
+export type DismissedReason = "user" | "round_closed";
 
 export interface Suggestion {
   id: string;
@@ -58,7 +58,6 @@ export interface Suggestion {
   severity: Severity;
   status: SuggestionStatus;
   dismissedReason?: DismissedReason;
-  duplicateOf?: string;
   promotedToCommentId?: string;
   createdAt: string;
 }

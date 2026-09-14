@@ -43,7 +43,6 @@ export function SuggestionCard({
     }
   };
 
-  const auto = suggestion.dismissedReason === "auto_duplicate";
   const dismissed = suggestion.status === "dismissed";
 
   return (
@@ -69,12 +68,6 @@ export function SuggestionCard({
       </div>
 
       <p className="mt-1 whitespace-pre-wrap text-[var(--rg-text-muted)]">{suggestion.body}</p>
-
-      {auto && (
-        <p className="mt-1 text-[var(--rg-text-faint)]">
-          Dismissed automatically — you already dismissed this earlier.
-        </p>
-      )}
 
       {accepting ? (
         <div className="mt-2">

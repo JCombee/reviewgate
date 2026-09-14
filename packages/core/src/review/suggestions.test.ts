@@ -5,10 +5,7 @@ import {
   applyCap,
   closeOpenSuggestions,
   dismissSuggestion,
-  findDuplicate,
-  normalize,
   reopenSuggestion,
-  similarity,
   suggestionCap,
   type IncomingSuggestion,
 } from "./suggestions.js";
@@ -93,77 +90,6 @@ describe("applyCap", () => {
   });
 });
 
-describe("normalize and similarity", () => {
-  it("strips line numbers, because a shifted line is the same remark", () => {
-    expect(normalize("L42: misses the tag variant")).toBe(normalize("L58: misses the tag variant"));
-  });
-
-  it("gives 1 for identical text", () => {
-    expect(similarity("the fetch has no error handling", "the fetch has no error handling")).toBe(1);
-  });
-
-  it("gives a low score for something entirely different", () => {
-    expect(
-      similarity("the fetch has no error handling", "this function belongs in another directory"),
-    ).toBeLessThan(0.3);
-  });
-
-  it("works on short texts too", () => {
-    expect(similarity("missing null check", "missing null check")).toBe(1);
-    expect(similarity("missing null check", "wrong order")).toBe(0);
-  });
-});
-
-describe("findDuplicate", () => {
-  const dismissed = suggestion({
-    id: "old",
-    body: "this fetch has no error handling",
-    path: "a.ts",
-    startLine: 17,
-    status: "dismissed",
-    dismissedReason: "user",
-  });
-
-  it("recognises the same remark on a shifted line in the same file", () => {
-    const match = findDuplicate(
-      { body: "this fetch still has no proper error handling", path: "a.ts", startLine: 17 },
-      [dismissed],
-    );
-    expect(match?.duplicateOf).toBe("old");
-  });
-
-  it("leaves a different point in the same file alone", () => {
-    expect(
-      findDuplicate({ body: "this variable is used nowhere", path: "a.ts", startLine: 17 }, [
-        dismissed,
-      ]),
-    ).toBeNull();
-  });
-
-  it("suppresses only what you dismissed, not what closed with a decision", () => {
-    const closed = { ...dismissed, dismissedReason: "round_closed" as const };
-    expect(
-      findDuplicate({ body: "this fetch has no error handling", path: "a.ts", startLine: 17 }, [
-        closed,
-      ]),
-    ).toBeNull();
-  });
-
-  it("ignores suggestions that are still pending", () => {
-    const pending = { ...dismissed, status: "pending" as const };
-    expect(
-      findDuplicate({ body: "this fetch has no error handling", path: "a.ts" }, [pending]),
-    ).toBeNull();
-  });
-
-  it("applies a stricter threshold outside the original file", () => {
-    const elsewhere = { body: "this fetch still has no proper error handling", path: "b.ts" };
-    // The same file clears 0.6; another file does not clear the required 0.8.
-    expect(findDuplicate({ ...elsewhere, path: "a.ts", startLine: 17 }, [dismissed])).not.toBeNull();
-    expect(findDuplicate(elsewhere, [dismissed])).toBeNull();
-  });
-});
-
 describe("addSuggestions", () => {
   it("adds suggestions as pending", () => {
     const { review: next, added } = addSuggestions(review(), [incoming()], { cap: 5 });
@@ -175,7 +101,7 @@ describe("addSuggestions", () => {
     });
   });
 
-  it("auto-dismisses a repeated suggestion without throwing it away", () => {
+  it("does not auto-dismiss a finding similar to an earlier user-dismissed suggestion", () => {
     const earlier = suggestion({
       id: "old",
       body: "this fetch has no error handling",
@@ -184,39 +110,13 @@ describe("addSuggestions", () => {
       status: "dismissed",
       dismissedReason: "user",
     });
-    const { review: next, added, duplicates } = addSuggestions(review([earlier]), [incoming()], {
+    const { review: next, added } = addSuggestions(review([earlier]), [incoming()], {
       cap: 5,
     });
 
-    expect(added).toHaveLength(0);
-    expect(duplicates).toHaveLength(1);
-    expect(duplicates[0]?.score).toBeGreaterThan(0.6);
+    expect(added).toHaveLength(1);
     expect(next.suggestions).toHaveLength(2);
-    expect(next.suggestions[1]).toMatchObject({
-      status: "dismissed",
-      dismissedReason: "auto_duplicate",
-      duplicateOf: "old",
-    });
-  });
-
-  it("does not count auto-dismissed duplicates towards the cap", () => {
-    const earlier = suggestion({
-      id: "old",
-      body: "this fetch has no error handling",
-      path: "a.ts",
-      startLine: 17,
-      status: "dismissed",
-      dismissedReason: "user",
-    });
-    const items = [
-      incoming(),
-      incoming({ body: "a null check is missing here", startLine: 30 }),
-      incoming({ body: "this name does not cover what it does", startLine: 40 }),
-    ];
-    const { added, duplicates } = addSuggestions(review([earlier]), items, { cap: 2 });
-    expect(duplicates).toHaveLength(1);
-    // The cap of 2 applies to the two new findings, not to the duplicate.
-    expect(added).toHaveLength(2);
+    expect(next.suggestions[1]).toMatchObject({ status: "pending" });
   });
 
   it("cuts off at the cap and reports what fell away", () => {
@@ -242,16 +142,14 @@ describe("status changes", () => {
   });
 
   it("reopening clears the dismissal", () => {
-    const auto = suggestion({
+    const dismissed = suggestion({
       id: "s1",
       status: "dismissed",
-      dismissedReason: "auto_duplicate",
-      duplicateOf: "old",
+      dismissedReason: "user",
     });
-    const next = reopenSuggestion(review([auto]), "s1");
+    const next = reopenSuggestion(review([dismissed]), "s1");
     expect(next.suggestions[0]?.status).toBe("pending");
     expect(next.suggestions[0]?.dismissedReason).toBeUndefined();
-    expect(next.suggestions[0]?.duplicateOf).toBeUndefined();
   });
 
   it("accepting points at the comment it produced", () => {

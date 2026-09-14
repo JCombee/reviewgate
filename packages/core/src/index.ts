@@ -76,21 +76,11 @@ export {
   applyCap,
   closeOpenSuggestions,
   DEFAULT_CAP,
-  DEFAULT_DEDUPE,
   dismissSuggestion,
-  findDuplicate,
-  normalize,
   reopenSuggestion,
-  similarity,
   suggestionCap,
 } from "./review/suggestions.js";
-export type {
-  AddSuggestionsResult,
-  DedupeConfig,
-  DuplicateMatch,
-  IncomingSuggestion,
-  SuggestionCapConfig,
-} from "./review/suggestions.js";
+export type { AddSuggestionsResult, IncomingSuggestion, SuggestionCapConfig } from "./review/suggestions.js";
 
 export { ANCHOR_WINDOW, reanchorComment, reanchorComments } from "./review/anchor.js";
 export type { AnchorOutcome, AnchorResult, FileLines } from "./review/anchor.js";

@@ -1,6 +1,4 @@
 import { randomUUID, randomBytes } from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
 import {
   addSuggestions,
   closeOpenSuggestions,
@@ -23,7 +21,6 @@ import {
   type ReviewGateConfig,
   type ReviewScope,
   type Side,
-  type Suggestion,
 } from "@reviewgate/core";
 import type {
   Chat,
@@ -344,12 +341,8 @@ export class Session {
       const agent = new ReviewAgent(this.#agentContext());
       const cap = suggestionCap(this.diff.changedLines, this.config.autoReviewCap);
       const findings = await agent.reviewPass(cap, this.#review);
-      const result = addSuggestions(this.#review, findings, {
-        cap,
-        dedupe: this.config.dedupe,
-      });
+      const result = addSuggestions(this.#review, findings, { cap });
 
-      await this.#logDedupe(result.duplicates);
       await this.commit(result.review);
       this.#setPassStatus({ state: "done", count: result.added.length });
     } catch (err) {
@@ -363,33 +356,6 @@ export class Session {
   #setPassStatus(status: PassStatus): void {
     this.#passStatus = status;
     this.#emit({ type: "pass", status });
-  }
-
-  /**
-   * Every automatic dismissal with its score goes to `dedupe.log`, so the thresholds
-   * can be adjusted after real use (§15).
-   */
-  async #logDedupe(
-    duplicates: ReadonlyArray<{ suggestion: Suggestion; score: number }>,
-  ): Promise<void> {
-    if (duplicates.length === 0) return;
-    try {
-      const info = await this.git.info();
-      const dir = path.join(info.gitDir, "reviewgate");
-      await fs.mkdir(dir, { recursive: true });
-      const lines = duplicates.map((d) =>
-        JSON.stringify({
-          at: new Date().toISOString(),
-          path: d.suggestion.path ?? null,
-          score: Number(d.score.toFixed(3)),
-          body: d.suggestion.body,
-          duplicateOf: d.suggestion.duplicateOf ?? null,
-        }),
-      );
-      await fs.appendFile(path.join(dir, "dedupe.log"), `${lines.join("\n")}\n`, "utf8");
-    } catch {
-      // Logging must never hold up the review.
-    }
   }
 
   summary(): ReviewSummary {
