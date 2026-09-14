@@ -1,7 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#1b1b19" />
-  <!-- The gate: two posts with a bar between them. -->
-  <rect x="7" y="8" width="3" height="16" rx="1.2" fill="#f2f2ee" />
-  <rect x="22" y="8" width="3" height="16" rx="1.2" fill="#f2f2ee" />
-  <rect x="10" y="14" width="12" height="3" rx="1.2" fill="#4a9d6b" />
+  <rect x="3" y="9" width="15" height="4.5" rx="2.25" fill="#34d399" />
+  <rect x="3" y="16.5" width="10" height="4.5" rx="2.25" fill="#f87171" />
+  <rect x="21" y="7" width="3.5" height="16" rx="1.75" fill="#8b5cf6" />
 </svg>
