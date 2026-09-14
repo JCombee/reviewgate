@@ -1,0 +1,29 @@
+stories:
+  - id: "1.1"
+    status: done
+  - id: "1.2"
+    status: done
+  - id: "1.3"
+    status: done
+  - id: "1.4"
+    status: done
+  - id: "2.1"
+    status: done
+  - id: "2.2"
+    status: done
+  - id: "3.1"
+    status: done
+  - id: "3.2"
+    status: done
+  - id: "3.3"
+    status: done
+  - id: "4.1"
+    status: ready-for-dev
+  - id: "5.1"
+    status: ready-for-dev
+  - id: "5.2"
+    status: ready-for-dev
+  - id: "6.1"
+    status: ready-for-dev
+  - id: "7.1"
+    status: ready-for-dev

@@ -1,8 +1,10 @@
+import path from "node:path";
 import { diffHash, NodeGitClient, readApproval, TestRepo } from "@reviewgate/core";
-import type { Review, ReviewSummary } from "@reviewgate/core/api";
+import type { Review, ReviewSummary, UpdateCheckResult } from "@reviewgate/core/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReviewAgent } from "./agent.js";
 import { createApp, SessionStore } from "./app.js";
+import { writeUpdateCheckCache } from "./lockfile.js";
 import { Session } from "./session.js";
 
 /**
@@ -14,6 +16,7 @@ import { Session } from "./session.js";
 const SERVER_TOKEN = "server-token-for-tests";
 
 let repo: TestRepo;
+let gitDir: string;
 let store: SessionStore;
 let app: ReturnType<typeof createApp>;
 let session: Session;
@@ -46,8 +49,12 @@ beforeEach(async () => {
   await repo.write("src/service.ts", "export const a = 1;\nexport const b = 22;\n");
   await repo.addAll();
 
+  gitDir = path.join(repo.root, ".git");
   store = new SessionStore();
-  app = createApp({ serverToken: SERVER_TOKEN, repoRoot: repo.root, version: "test" }, store);
+  app = createApp(
+    { serverToken: SERVER_TOKEN, repoRoot: repo.root, version: "test", gitDir },
+    store,
+  );
   session = await Session.create(
     { git: await NodeGitClient.open(repo.root), scope: "staged", options: {} },
     store.highlighting,
@@ -468,5 +475,58 @@ describe("decision", () => {
     });
     const { review } = await json<{ review: Review }>(res);
     expect(review.rounds[0]?.summary).toBeNull();
+  });
+});
+
+describe("update check (Story 5.1)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns the documented shape and calls GitHub at most once per calendar day", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ tag_name: "v99.0.0" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const first = await app.fetch(new Request("http://127.0.0.1/api/update-check"));
+    expect(first.status).toBe(200);
+    const firstBody = await json<UpdateCheckResult>(first);
+    expect(firstBody).toEqual({ current: "test", latest: "v99.0.0", updateAvailable: true });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    // Same calendar day: the cache answers, GitHub is not called again.
+    const second = await app.fetch(new Request("http://127.0.0.1/api/update-check"));
+    const secondBody = await json<UpdateCheckResult>(second);
+    expect(secondBody).toEqual(firstBody);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    // Force the cache's stored date back a day; the next call must be treated as a
+    // new calendar day and make exactly one more GitHub call.
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const y = yesterday.getFullYear();
+    const m = String(yesterday.getMonth() + 1).padStart(2, "0");
+    const d = String(yesterday.getDate()).padStart(2, "0");
+    await writeUpdateCheckCache(gitDir, {
+      date: `${y}-${m}-${d}`,
+      latest: "v99.0.0",
+      updateAvailable: true,
+    });
+
+    const third = await app.fetch(new Request("http://127.0.0.1/api/update-check"));
+    expect(third.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("resolves to a non-throwing, non-5xx result when GitHub is unreachable", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue(new Error("network down"));
+
+    const res = await app.fetch(new Request("http://127.0.0.1/api/update-check"));
+    expect(res.status).toBe(200);
+    const body = await json<UpdateCheckResult>(res);
+    expect(body).toEqual({ current: "test", latest: null, updateAvailable: false });
   });
 });

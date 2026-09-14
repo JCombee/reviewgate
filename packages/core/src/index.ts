@@ -19,6 +19,8 @@ export { NodeGitClient } from "./git/NodeGitClient.js";
 
 export { diffHash, normalizePatch } from "./review/hash.js";
 export { REPO, VERSION } from "./version.js";
+export { isNewer, latestTag } from "./update.js";
+export type { LatestTag } from "./update.js";
 export { ReviewStore } from "./review/store.js";
 export {
   addComment,
@@ -65,6 +67,8 @@ export {
 export type { Approval } from "./review/approval.js";
 export { waitForDecision } from "./hook/wait.js";
 export type { WaitOptions, WaitResult } from "./hook/wait.js";
+export { resolveHooksDir, runPreCommitHook } from "./hook/precommit.js";
+export type { PreCommitOutcome } from "./hook/precommit.js";
 
 export {
   acceptSuggestion,

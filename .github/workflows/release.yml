@@ -109,7 +109,7 @@ jobs:
           name: binaries
           path: release
 
-      - name: Publish the release
+      - name: Publish the release as a draft
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -117,4 +117,5 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes \
+            --draft \
             release/*

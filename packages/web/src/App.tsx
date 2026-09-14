@@ -13,6 +13,7 @@ import { CommentsPanel } from "./components/CommentsPanel.jsx";
 import { FilePanel } from "./components/FilePanel.jsx";
 import { Overview } from "./components/Overview.jsx";
 import { Sidebar } from "./components/Sidebar.jsx";
+import { UpdatePrompt } from "./components/UpdatePrompt.jsx";
 import { createReviewApi, subscribeToReview } from "./lib/reviewClient.js";
 
 type View = "unified" | "split";
@@ -206,6 +207,17 @@ export function App() {
   if (decision != null) {
     return (
       <Centered>
+        <img
+          src="/logo-light.svg"
+          alt="ReviewGate"
+          className="rg-final-logo rg-final-logo-light mb-3 h-7 w-auto"
+        />
+        <img
+          src="/logo-dark.svg"
+          alt="ReviewGate"
+          className="rg-final-logo rg-final-logo-dark mb-3 h-7 w-auto"
+        />
+        <br />
         <span style={{ color: decision === "approve" ? "var(--rg-approve)" : "var(--rg-changes)" }}>
           {decision === "approve"
             ? "Approved — the commit goes through."
@@ -304,6 +316,7 @@ export function App() {
               </button>
             ))}
           </div>
+          <UpdatePrompt />
         </div>
       </header>
 
