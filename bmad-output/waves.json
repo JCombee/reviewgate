@@ -1,0 +1,103 @@
+{
+  "max_parallel": 3,
+  "waves": [
+    {
+      "wave": 1,
+      "stories": [
+        {
+          "id": "4.1",
+          "slug": "final-page-logo",
+          "branch": "story/4.1-final-page-logo",
+          "scope": [
+            "packages/web/src/App.tsx",
+            "packages/web/src/styles.css",
+            "packages/web/public/logo-dark.svg`,"
+          ]
+        },
+        {
+          "id": "5.1",
+          "slug": "update-check-endpoint",
+          "branch": "story/5.1-update-check-endpoint",
+          "scope": [
+            "packages/core/src/update.ts",
+            "packages/core/src/update.test.ts",
+            "packages/core/src/index.ts",
+            "packages/core/src/api.ts",
+            "packages/cli/src/commands/update.ts",
+            "packages/cli/src/commands/update.test.ts",
+            "packages/server/src/lockfile.ts",
+            "packages/server/src/updateCheck.ts",
+            "packages/server/src/updateCheck.test.ts",
+            "packages/server/src/app.ts",
+            "packages/server/src/index.ts",
+            "packages/server/src/app.test.ts"
+          ]
+        }
+      ],
+      "integration_branch": "integration/wave-1",
+      "merge_order": [
+        "4.1",
+        "5.1"
+      ]
+    },
+    {
+      "wave": 2,
+      "stories": [
+        {
+          "id": "5.2",
+          "slug": "update-prompt-ui",
+          "branch": "story/5.2-update-prompt-ui",
+          "scope": [
+            "packages/web/src/components/UpdatePrompt.tsx",
+            "packages/web/src/lib/reviewClient.ts",
+            "packages/web/src/App.tsx",
+            "packages/web/src/styles.css"
+          ]
+        },
+        {
+          "id": "6.1",
+          "slug": "precommit-hook-runner",
+          "branch": "story/6.1-precommit-hook-runner",
+          "scope": [
+            "packages/core/src/hook/precommit.ts",
+            "packages/core/src/hook/precommit.test.ts",
+            "packages/core/src/index.ts",
+            "packages/cli/src/commands/hook.ts",
+            "packages/cli/src/hook.test.ts"
+          ]
+        }
+      ],
+      "integration_branch": "integration/wave-2",
+      "merge_order": [
+        "5.2",
+        "6.1"
+      ]
+    },
+    {
+      "wave": 3,
+      "stories": [
+        {
+          "id": "7.1",
+          "slug": "remove-suggestion-dedupe",
+          "branch": "story/7.1-remove-suggestion-dedupe",
+          "scope": [
+            "packages/core/src/review/suggestions.ts",
+            "packages/core/src/review/suggestions.test.ts",
+            "packages/core/src/review/types.ts",
+            "packages/core/src/index.ts",
+            "packages/core/src/config.ts",
+            "packages/core/src/config.test.ts",
+            "packages/core/src/review/store.test.ts",
+            "packages/server/src/session.ts",
+            "packages/web/src/components/SuggestionCard.tsx"
+          ]
+        }
+      ],
+      "integration_branch": "integration/wave-3",
+      "merge_order": [
+        "7.1"
+      ]
+    }
+  ],
+  "deferred": []
+}

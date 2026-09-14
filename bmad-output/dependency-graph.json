@@ -1,0 +1,112 @@
+{
+  "max_parallel": 3,
+  "nodes": [
+    {
+      "id": "4.1",
+      "slug": "final-page-logo",
+      "epic": 4,
+      "status": "ready-for-dev",
+      "scope": [
+        "packages/web/src/App.tsx",
+        "packages/web/src/styles.css",
+        "packages/web/public/logo-dark.svg`,"
+      ]
+    },
+    {
+      "id": "5.1",
+      "slug": "update-check-endpoint",
+      "epic": 5,
+      "status": "ready-for-dev",
+      "scope": [
+        "packages/core/src/update.ts",
+        "packages/core/src/update.test.ts",
+        "packages/core/src/index.ts",
+        "packages/core/src/api.ts",
+        "packages/cli/src/commands/update.ts",
+        "packages/cli/src/commands/update.test.ts",
+        "packages/server/src/lockfile.ts",
+        "packages/server/src/updateCheck.ts",
+        "packages/server/src/updateCheck.test.ts",
+        "packages/server/src/app.ts",
+        "packages/server/src/index.ts",
+        "packages/server/src/app.test.ts"
+      ]
+    },
+    {
+      "id": "5.2",
+      "slug": "update-prompt-ui",
+      "epic": 5,
+      "status": "ready-for-dev",
+      "scope": [
+        "packages/web/src/components/UpdatePrompt.tsx",
+        "packages/web/src/lib/reviewClient.ts",
+        "packages/web/src/App.tsx",
+        "packages/web/src/styles.css"
+      ]
+    },
+    {
+      "id": "6.1",
+      "slug": "precommit-hook-runner",
+      "epic": 6,
+      "status": "ready-for-dev",
+      "scope": [
+        "packages/core/src/hook/precommit.ts",
+        "packages/core/src/hook/precommit.test.ts",
+        "packages/core/src/index.ts",
+        "packages/cli/src/commands/hook.ts",
+        "packages/cli/src/hook.test.ts"
+      ]
+    },
+    {
+      "id": "7.1",
+      "slug": "remove-suggestion-dedupe",
+      "epic": 7,
+      "status": "ready-for-dev",
+      "scope": [
+        "packages/core/src/review/suggestions.ts",
+        "packages/core/src/review/suggestions.test.ts",
+        "packages/core/src/review/types.ts",
+        "packages/core/src/index.ts",
+        "packages/core/src/config.ts",
+        "packages/core/src/config.test.ts",
+        "packages/core/src/review/store.test.ts",
+        "packages/server/src/session.ts",
+        "packages/web/src/components/SuggestionCard.tsx"
+      ]
+    }
+  ],
+  "ordering_edges": [
+    {
+      "from": "5.1",
+      "to": "5.2",
+      "reason": "intra-epic-sequence"
+    }
+  ],
+  "conflicts": [
+    {
+      "a": "4.1",
+      "b": "5.2",
+      "class": "file",
+      "detail": "packages/web/src/App.tsx / packages/web/src/App.tsx"
+    },
+    {
+      "a": "5.1",
+      "b": "6.1",
+      "class": "file",
+      "detail": "packages/core/src/index.ts / packages/core/src/index.ts"
+    },
+    {
+      "a": "5.1",
+      "b": "7.1",
+      "class": "file",
+      "detail": "packages/core/src/index.ts / packages/core/src/index.ts"
+    },
+    {
+      "a": "6.1",
+      "b": "7.1",
+      "class": "file",
+      "detail": "packages/core/src/index.ts / packages/core/src/index.ts"
+    }
+  ],
+  "blocked": []
+}

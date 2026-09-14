@@ -206,6 +206,17 @@ export function App() {
   if (decision != null) {
     return (
       <Centered>
+        <img
+          src="/logo-light.svg"
+          alt="ReviewGate"
+          className="rg-final-logo rg-final-logo-light mb-3 h-7 w-auto"
+        />
+        <img
+          src="/logo-dark.svg"
+          alt="ReviewGate"
+          className="rg-final-logo rg-final-logo-dark mb-3 h-7 w-auto"
+        />
+        <br />
         <span style={{ color: decision === "approve" ? "var(--rg-approve)" : "var(--rg-changes)" }}>
           {decision === "approve"
             ? "Approved — the commit goes through."
