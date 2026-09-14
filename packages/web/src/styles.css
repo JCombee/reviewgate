@@ -325,3 +325,69 @@ body {
 :root[data-theme="dark"] .rg-final-logo-dark {
   display: inline-block;
 }
+
+/*
+  Update-available modal: the first modal/overlay in this codebase, so there is
+  nothing existing to reuse — kept to the minimum a single fixed overlay + centered
+  panel needs.
+*/
+.rg-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.rg-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 22rem;
+  max-width: calc(100vw - 2rem);
+  padding: 1.25rem;
+  border-radius: 8px;
+  border: 1px solid var(--rg-border);
+  background: var(--rg-bg-raised);
+  color: var(--rg-text);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+}
+
+.rg-modal-command {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  border: 1px solid var(--rg-border);
+  background: var(--rg-bg-sunken);
+}
+
+.rg-modal-command .rg-code {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.rg-modal-copy {
+  flex-shrink: 0;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid var(--rg-border);
+  background: var(--rg-bg-raised);
+  color: var(--rg-text);
+}
+
+.rg-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rg-modal-actions button {
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  border: 1px solid var(--rg-border);
+  background: var(--rg-bg-raised);
+  color: var(--rg-text);
+}

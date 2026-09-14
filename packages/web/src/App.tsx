@@ -13,6 +13,7 @@ import { CommentsPanel } from "./components/CommentsPanel.jsx";
 import { FilePanel } from "./components/FilePanel.jsx";
 import { Overview } from "./components/Overview.jsx";
 import { Sidebar } from "./components/Sidebar.jsx";
+import { UpdatePrompt } from "./components/UpdatePrompt.jsx";
 import { createReviewApi, subscribeToReview } from "./lib/reviewClient.js";
 
 type View = "unified" | "split";
@@ -315,6 +316,7 @@ export function App() {
               </button>
             ))}
           </div>
+          <UpdatePrompt />
         </div>
       </header>
 
