@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="4 4 116.47 24">
+  <rect x="6" y="10" width="13" height="4" rx="1.5" fill="#3FB950" />
+  <rect x="6" y="18" width="9" height="4" rx="1.5" fill="#E5534B" />
+  <rect x="23" y="6" width="3" height="20" rx="1.5" fill="#7A5AF8" />
+  <text x="42" y="16" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, &quot;Noto Sans&quot;, Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#E6EDF3">ReviewGate</text>
+</svg>

@@ -1,5 +1,8 @@
 <h1 align="center">
-  <img src="packages/web/public/favicon.svg" width="56" height="56" valign="middle" alt="" />&nbsp;ReviewGate
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="packages/web/public/logo-dark.svg" />
+    <img src="packages/web/public/logo-light.svg" height="36" alt="ReviewGate" />
+  </picture>
 </h1>
 
 A local, browser-based code review gate that opens as soon as Claude Code wants to
