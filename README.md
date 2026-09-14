@@ -1,8 +1,6 @@
-<p align="center">
-  <img src="packages/web/public/favicon.svg" width="72" height="72" alt="ReviewGate" />
-</p>
-
-<h1 align="center">ReviewGate</h1>
+<h1 align="center">
+  <img src="packages/web/public/favicon.svg" width="40" height="40" align="middle" alt="" />&nbsp;&nbsp;ReviewGate
+</h1>
 
 A local, browser-based code review gate that opens as soon as Claude Code wants to
 commit. Claude Code cannot commit without a human decision having been made.
