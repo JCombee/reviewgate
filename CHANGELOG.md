@@ -8,16 +8,29 @@ Entries describe what changed for someone using the gate, not which files moved.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-14
+
 ### Added
 
-- The panel on the right now holds a second tab: every comment in the review in one
-  list, filtered by open, resolved or outdated and grouped per file. Clicking one takes
-  you to the thread in the diff — it unfolds a collapsed file and opens the outdated
-  section if that is where the comment lives.
+- The panel on the right now holds a second tab: every comment and suggestion in the
+  review in one list, filtered by open, resolved, outdated or (for suggestions)
+  dismissed, and grouped per file. Suggestions carry their own badge and severity color
+  and never touch the approval gate. Clicking one takes you to the thread in the diff —
+  it unfolds a collapsed file and opens the outdated section if that is where the
+  comment lives.
+- A review can now hold several independent, named chats instead of one flat thread,
+  each with its own model — ask a fast model one thing and a stronger one another
+  without losing either conversation.
 - `npm run install:local` compiles the working tree and installs it over the reviewgate
   you already have, for anyone working on ReviewGate itself. With `--wrapper` it skips
   the compiler and installs a launcher that runs the checkout — the way in on WSL, where
   bun cannot compile a checkout that lives on a Windows drive.
+
+### Changed
+
+- Approving or requesting changes now replaces the whole screen with a plain decision
+  message, instead of only swapping the footer while the diff and panels stayed
+  underneath. It is now unambiguous that the review is done and the window can close.
 
 ### Fixed
 
@@ -91,7 +104,8 @@ The first release, and the first one you can install without a checkout.
 - The Claude Code plugin: the `PreToolUse` hook, the `/review` command and the
   `reviewgate` skill.
 
-[Unreleased]: https://github.com/JCombee/reviewgate/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/JCombee/reviewgate/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/JCombee/reviewgate/releases/tag/v0.2.0
 [0.1.2]: https://github.com/JCombee/reviewgate/releases/tag/v0.1.2
 [0.1.1]: https://github.com/JCombee/reviewgate/releases/tag/v0.1.1
 [0.1.0]: https://github.com/JCombee/reviewgate/releases/tag/v0.1.0
