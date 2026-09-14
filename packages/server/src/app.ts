@@ -21,12 +21,15 @@ import { streamSSE } from "hono/streaming";
 import { hasWebAssets, loadAsset } from "./assets.js";
 import { Highlighting } from "./highlight.js";
 import { DecisionConflict, Session } from "./session.js";
+import { checkForUpdate } from "./updateCheck.js";
 
 export interface AppDeps {
   /** Admin token from server.json; only the CLI may create sessions with it. */
   serverToken: string;
   repoRoot: string;
   version: string;
+  /** `.git` dir; the state dir for the update-check cache lives at `stateDir(gitDir)`. */
+  gitDir: string;
 }
 
 export interface CreateSessionBody {
@@ -76,6 +79,13 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
   app.get("/healthz", (c) =>
     c.json({ ok: true, version: deps.version, repoRoot: deps.repoRoot, sessions: store.size }),
   );
+
+  // Unauthenticated like /healthz: no review token applies, and this only echoes the
+  // public GitHub releases API's own answer (§5, FR-008).
+  app.get("/api/update-check", async (c) => {
+    const result = await checkForUpdate(deps.gitDir, deps.version);
+    return c.json(result);
+  });
 
   // --- admin: creating a session ------------------------------------------
   app.post("/api/sessions", async (c) => {

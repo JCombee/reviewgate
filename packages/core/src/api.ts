@@ -118,6 +118,13 @@ export interface ApiError {
   error: string;
 }
 
+/** `GET /api/update-check` (§5, FR-008): the daily-cached GitHub release check. */
+export interface UpdateCheckResult {
+  current: string;
+  latest: string | null;
+  updateAvailable: boolean;
+}
+
 export type {
   DiffFile,
   DiffHunk,

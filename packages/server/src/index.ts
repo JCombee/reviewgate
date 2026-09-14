@@ -37,7 +37,10 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
 
   const serverToken = randomBytes(24).toString("base64url");
   const store = new SessionStore();
-  const app = createApp({ serverToken, repoRoot: info.root, version: VERSION }, store);
+  const app = createApp(
+    { serverToken, repoRoot: info.root, version: VERSION, gitDir: info.gitDir },
+    store,
+  );
 
   const server: ServerType = await new Promise((resolve) => {
     const s = serve({ fetch: app.fetch, hostname: "127.0.0.1", port: opts.port ?? 0 }, () =>

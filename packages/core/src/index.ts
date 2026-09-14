@@ -19,6 +19,8 @@ export { NodeGitClient } from "./git/NodeGitClient.js";
 
 export { diffHash, normalizePatch } from "./review/hash.js";
 export { REPO, VERSION } from "./version.js";
+export { isNewer, latestTag } from "./update.js";
+export type { LatestTag } from "./update.js";
 export { ReviewStore } from "./review/store.js";
 export {
   addComment,
