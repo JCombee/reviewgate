@@ -299,7 +299,9 @@ git tag -a v0.2.0 -m "v0.2.0 — ..." && git push origin v0.2.0
 `.github/workflows/release.yml` refuses a tag whose version disagrees with any
 manifest or which the CHANGELOG has never heard of. Past that it runs the tests,
 compiles the five targets, writes a `.sha256` next to each one and publishes them as a
-GitHub release. That release is what the installer and `reviewgate update` read.
+**draft** GitHub release — a chance to try the actual asset before anyone else can
+download it. Only a published release is what the installer and `reviewgate update`
+read; the skill covers testing the draft and publishing it.
 
 ## Limits
 

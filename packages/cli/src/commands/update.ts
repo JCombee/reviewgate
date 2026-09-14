@@ -72,10 +72,13 @@ export async function cmdUpdate(argv: readonly string[]): Promise<number> {
     }
 
     const asset = assetName();
-    const url = `https://github.com/${REPO}/releases/download/${tag}/${asset}`;
+    const source = await assetSource(tag, asset, wanted);
 
     process.stdout.write(`Downloading ${asset}...\n`);
-    const [body, expected] = await Promise.all([download(url), downloadText(`${url}.sha256`)]);
+    const [body, expected] = await Promise.all([
+      download(source.url, source.headers),
+      downloadText(source.checksumUrl, source.headers),
+    ]);
     if (!body || expected === null) {
       process.stderr.write(`reviewgate: ${tag} has no ${asset}.\n`);
       return 1;
@@ -205,16 +208,85 @@ async function binaryPath(): Promise<string | null> {
   }
 }
 
-async function download(url: string): Promise<Buffer | null> {
-  const res = await fetch(url, { redirect: "follow", headers: { "user-agent": "reviewgate" } });
+async function download(url: string, headers: Record<string, string> = {}): Promise<Buffer | null> {
+  const res = await fetch(url, { redirect: "follow", headers: { "user-agent": "reviewgate", ...headers } });
   if (!res.ok) return null;
   return Buffer.from(await res.arrayBuffer());
 }
 
-async function downloadText(url: string): Promise<string | null> {
-  const res = await fetch(url, { redirect: "follow", headers: { "user-agent": "reviewgate" } });
+async function downloadText(url: string, headers: Record<string, string> = {}): Promise<string | null> {
+  const res = await fetch(url, { redirect: "follow", headers: { "user-agent": "reviewgate", ...headers } });
   if (!res.ok) return null;
   return res.text();
+}
+
+interface AssetSource {
+  url: string;
+  checksumUrl: string;
+  headers: Record<string, string>;
+}
+
+/**
+ * Where to download the asset and its checksum from.
+ *
+ * Ordinarily the plain `releases/download` URL, which needs no auth and is all a
+ * published release ever needs. A draft release's assets do not exist at that URL for
+ * anyone unauthenticated, so `reviewgate update --version <tag>` also accepts a
+ * `GH_TOKEN`/`GITHUB_TOKEN` — the same variable `gh` itself uses — and looks the
+ * release up through the API instead, which does list a draft's assets to an
+ * authenticated maintainer. This only ever runs for a tag pinned with `--version`:
+ * a plain `reviewgate update` must never resolve to a release nobody else can see yet.
+ */
+async function assetSource(tag: string, asset: string, wanted: string | null): Promise<AssetSource> {
+  const plain = `https://github.com/${REPO}/releases/download/${tag}/${asset}`;
+  const fallback: AssetSource = { url: plain, checksumUrl: `${plain}.sha256`, headers: {} };
+
+  const token = wanted ? (process.env["GH_TOKEN"] ?? process.env["GITHUB_TOKEN"]) : undefined;
+  if (!token) return fallback;
+
+  const release = await findReleaseByTag(tag, token);
+  const bin = release?.assets.find((a) => a.name === asset);
+  const checksum = release?.assets.find((a) => a.name === `${asset}.sha256`);
+  if (!bin || !checksum) return fallback;
+
+  return {
+    url: bin.url,
+    checksumUrl: checksum.url,
+    headers: { authorization: `Bearer ${token}`, accept: "application/octet-stream" },
+  };
+}
+
+interface ReleaseAsset {
+  name: string;
+  url: string;
+}
+
+/**
+ * A release by tag, including drafts — unlike `GET /releases/tags/{tag}` and
+ * `GET /releases/latest`, which both only ever return a published release even when
+ * authenticated. Paginated once at 100, which comfortably covers this repo's history;
+ * revisit if that ever stops being true.
+ */
+async function findReleaseByTag(
+  tag: string,
+  token: string,
+): Promise<{ assets: ReleaseAsset[] } | null> {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=100`, {
+      headers: {
+        accept: "application/vnd.github+json",
+        authorization: `Bearer ${token}`,
+        "user-agent": "reviewgate",
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return null;
+    const releases = (await res.json()) as Array<{ tag_name?: unknown; assets?: ReleaseAsset[] }>;
+    const release = releases.find((r) => r.tag_name === tag);
+    return release ? { assets: release.assets ?? [] } : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

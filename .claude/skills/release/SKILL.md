@@ -142,15 +142,48 @@ gh run watch $(gh run list --limit 1 --json databaseId --jq '.[0].databaseId') -
 gh release view v<version> --json assets --jq '.assets[] | "\(.name) \(.size)"'
 ```
 
+The workflow publishes the release as a **draft**. A draft does not show up on the
+releases page, is not `latest`, and `reviewgate update` cannot see it — nothing ships
+to anyone until it is published by hand.
+
 The release must carry ten assets: five binaries (`darwin-arm64`, `darwin-x64`,
 `linux-x64`, `linux-arm64`, `win32-x64.exe`) each with a `.sha256`.
 
-## 8. Afterwards
+## 8. Test the draft, then publish
+
+This is the point of the draft: try the actual asset, through the actual updater,
+before anyone else can download it. A plain `reviewgate update` cannot see a draft —
+that is the point, not a bug to work around — but `--version` combined with a
+`GH_TOKEN` (the same variable `gh` itself uses) makes the updater look the release up
+through the API instead, which does show a draft's assets to an authenticated
+maintainer:
+
+```bash
+GH_TOKEN=$(gh auth token) reviewgate update --version v<version>
+reviewgate --version
+```
+
+This exercises the real path: download, checksum, swap the binary, update the plugin.
+For a release that touches the hook, the server or the web UI, also run it for real —
+open a review, or point a plugin at this binary — rather than trusting `--version`
+alone.
+
+Once it looks right:
+
+```bash
+gh release edit v<version> --draft=false
+```
+
+A release that fails the check is not published. Fix the cause on `main`, cut the next
+patch version, and leave this tag as an unpublished draft — do not edit it into shape
+after the fact and publish it late.
+
+## 9. Afterwards
 
 Report to the user: the version, the release URL, and that `reviewgate update` on an
 existing install brings both the binary and the plugin current in one go.
 
-If the machine has ReviewGate installed, confirm the release is really reachable:
+Confirm the now-published release is reachable:
 
 ```bash
 reviewgate update --check
