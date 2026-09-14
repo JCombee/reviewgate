@@ -19,6 +19,47 @@ or delete past entries — supersede them with a new entry that references the o
 
 ---
 
+### 2026-09-14 — Round 2 build: all 5 stories implemented and merged across 3 waves
+- **Decision:** Built all 5 `ready-for-dev` stories from the wave plan below via isolated
+  git-worktree dev agents (one per story, `general-purpose` subagent, full tool access),
+  in wave order: Wave 1 {4.1, 5.1} → Wave 2 {5.2, 6.1} → Wave 3 {7.1}, merging each wave
+  into `main` before starting the next. Final state: all 5 stories `done`, `main` at
+  `1ea871d`, full suite green (25 test files / 319 tests) and typecheck clean after each
+  wave's merge.
+- **Rationale / notable deviations from a clean build:**
+  - Commit signing: the repo's configured commit-signing path (SSH signing via a
+    Windows-side 1Password binary) is unreachable from this sandboxed environment —
+    plain `git commit` fails outright (`fatal: failed to write commit object`), not a
+    silent unsigned commit. The user explicitly authorized `--no-gpg-sign` for this
+    session's build commits after two rounds of confirmation; every commit in this build
+    (dev-agent commits and my own merge commits) used it under that authorization. This
+    is a session-scoped exception, not a standing policy change.
+  - Two of five worktrees (5.1, 7.1) started from a stale base behind `main`'s actual tip
+    and had to be synced mid-flight (rebase for 5.1, merge for 7.1) before their story
+    work could safely land — resolved by each dev agent, verified by full test+typecheck
+    after.
+  - A recurring, unrelated sandbox restriction (`.claude/skills/release/SKILL.md` is
+    read-only inside worktrees) corrupted that one file's content in two worktrees' sync
+    commits. Fixed at merge time via git plumbing (`commit-tree` with a manually
+    corrected tree) rather than a normal `git merge`, keeping `main`'s version of that
+    file untouched — the fix never touched the restricted path directly, only rebuilt
+    the git object graph around it.
+  - `npm run typecheck`'s root script (`tsc -b --noEmit ...`) hit a real but pre-existing
+    TypeScript build-mode limitation (`TS6310: Referenced project ... may not disable
+    emit`) whenever a referenced composite project's build cache was invalidated by a
+    story's changes (6.1, 7.1 both touched `packages/core`). Not a code defect — running
+    a plain `npm run build:ts` first (which `npm test`'s `pretest` already does) refreshes
+    the cache and the typecheck passes clean. Flagged here since it will recur for any
+    future change to `packages/core`/`packages/server` and is worth fixing in the script
+    itself at some point (out of scope for this build).
+  - Cleanup of the 5 agent worktrees (`git worktree remove`/`prune`) fails on every one
+    with `Device or resource busy`, including two unrelated pre-existing stale entries —
+    a filesystem/sandbox-level lock, not caused by any specific worktree's content. Left
+    as a known non-blocking loose end; all branches are already merged into `main`.
+- **Made by:** 5 dev-agent subagents (implementation) + orchestrator (merge, conflict
+  resolution, verification)
+- **Supersedes:** none (extends the story-planning entry below)
+
 ### 2026-09-14 — Round 2 stories authored, audited, and sequenced into a 3-wave build plan
 - **Decision:** Compiled the 5 Round 2 story files (4.1, 5.1, 5.2, 6.1, 7.1) via parallel
   `story-author` subagents (one per epic), ran `scope-conflict-check.sh` across the full

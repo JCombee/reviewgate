@@ -18,12 +18,12 @@ stories:
   - id: "3.3"
     status: done
   - id: "4.1"
-    status: ready-for-dev
+    status: done
   - id: "5.1"
-    status: ready-for-dev
+    status: done
   - id: "5.2"
-    status: ready-for-dev
+    status: done
   - id: "6.1"
-    status: ready-for-dev
+    status: done
   - id: "7.1"
-    status: ready-for-dev
+    status: done
