@@ -11,6 +11,7 @@ import {
   readApproval,
   renderApproved,
   renderChangesRequested,
+  runPreCommitHook,
   waitForDecision,
   type CommitAnalysis,
   type DiffOptions,
@@ -112,6 +113,19 @@ async function decide(
 
   // Halfway through a merge, rebase or cherry-pick, reviewing makes no sense (§12).
   if (info.inMergeOrRebase) return null;
+
+  // Run the repo's own `pre-commit` before the diff is captured, so a commit that is
+  // going to fail its own hooks is denied before anyone spends time reviewing it, and
+  // the diff below reflects whatever the hook itself rewrote. A hook-runner error
+  // unrelated to the hook's own exit code fails open here (§11); only the hook's own
+  // non-zero exit denies.
+  const preCommit = await runPreCommitHook(info.root, info.gitDir);
+  if (preCommit.kind === "fail") {
+    return {
+      kind: "deny",
+      reason: preCommit.output || "`pre-commit` exited with a non-zero status.",
+    };
+  }
 
   const config = await loadConfig(info.root);
 
