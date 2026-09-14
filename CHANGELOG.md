@@ -8,12 +8,31 @@ Entries describe what changed for someone using the gate, not which files moved.
 
 ## [Unreleased]
 
-### Changed
+## [0.3.0] - 2026-09-14
 
+### Added
+
+- The final review page now shows the ReviewGate logo and name, matching the system,
+  light or dark theme.
+- ReviewGate checks once a day whether a newer release is out. When one is, a button
+  appears in the header; it opens the exact `reviewgate update` command to run, with a
+  one-click copy.
+- The repo's own `pre-commit` hook, if it has one, now runs before the review opens. A
+  failing hook denies the commit immediately, before any review starts; a hook that
+  rewrites files is reflected in the diff you review. Repos without a `pre-commit` hook
+  are unaffected.
 - `reviewgate update` now also updates the Claude Code plugin — the equivalent of
   `claude plugin marketplace update reviewgate` and `claude plugin update
   reviewgate@reviewgate` runs as part of the same command. A missing `claude` is
   reported rather than failing the binary update.
+- Releases are published as drafts first and can be pulled by an authenticated
+  maintainer via `reviewgate update --version <version>` with `GH_TOKEN` set, so a
+  release can be tried through the real updater before it goes out to everyone.
+
+### Removed
+
+- Suggestions are no longer automatically dismissed as duplicates of ones from an
+  earlier round. Every suggestion now stays until you resolve or dismiss it yourself.
 
 ## [0.2.0] - 2026-09-14
 
@@ -111,7 +130,8 @@ The first release, and the first one you can install without a checkout.
 - The Claude Code plugin: the `PreToolUse` hook, the `/review` command and the
   `reviewgate` skill.
 
-[Unreleased]: https://github.com/JCombee/reviewgate/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/JCombee/reviewgate/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/JCombee/reviewgate/releases/tag/v0.3.0
 [0.2.0]: https://github.com/JCombee/reviewgate/releases/tag/v0.2.0
 [0.1.2]: https://github.com/JCombee/reviewgate/releases/tag/v0.1.2
 [0.1.1]: https://github.com/JCombee/reviewgate/releases/tag/v0.1.1
