@@ -1,4 +1,10 @@
-import type { CreateCommentBody, PassStatus, Review, ReviewEvent } from "@reviewgate/core/api";
+import type {
+  CreateCommentBody,
+  PassStatus,
+  Review,
+  ReviewEvent,
+  UpdateCheckResult,
+} from "@reviewgate/core/api";
 import type { Ctx } from "../api.js";
 
 /** Every mutation on the review, in one object that travels through the components. */
@@ -107,4 +113,15 @@ export function subscribeToReview(ctx: Ctx, handlers: ReviewEventHandlers): () =
     source.addEventListener(name, handle as EventListener);
   }
   return () => source.close();
+}
+
+/**
+ * `GET /api/update-check` (§5, FR-008): unlike every other export in this file, this
+ * endpoint takes no review id and no bearer token — it is reachable as a bare,
+ * unauthenticated fetch, so it bypasses `send()`/`createReviewApi` entirely.
+ */
+export async function fetchUpdateCheck(): Promise<UpdateCheckResult> {
+  const res = await fetch("/api/update-check");
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return (await res.json()) as UpdateCheckResult;
 }
