@@ -8,6 +8,13 @@ Entries describe what changed for someone using the gate, not which files moved.
 
 ## [Unreleased]
 
+### Changed
+
+- `reviewgate update` now also updates the Claude Code plugin — the equivalent of
+  `claude plugin marketplace update reviewgate` and `claude plugin update
+  reviewgate@reviewgate` runs as part of the same command. A missing `claude` is
+  reported rather than failing the binary update.
+
 ## [0.2.0] - 2026-09-14
 
 ### Added

@@ -86,7 +86,7 @@ download by hand through a browser will need Gatekeeper's approval on macOS.
 ## Updating
 
 ```bash
-reviewgate update           # replace the binary with the newest release
+reviewgate update           # replace the binary with the newest release, and update the plugin
 reviewgate update --check   # only look, do not install
 reviewgate --version        # what you have now
 ```
@@ -95,16 +95,11 @@ The updater resolves the newest release, verifies the checksum and only then swa
 binary — a failed download leaves the working install untouched. Rerunning the install
 script does the same thing.
 
-The plugin itself is managed by Claude Code, separately from the binary. After a
-release that changes the commands or the hook:
-
-```bash
-claude plugin marketplace update reviewgate
-claude plugin update reviewgate@reviewgate
-```
-
-Restart Claude Code to apply it. Most releases change only the binary, which
-`reviewgate update` covers on its own.
+The plugin itself is managed by Claude Code, separately from the binary, but
+`reviewgate update` brings it along: it runs `claude plugin marketplace update
+reviewgate` and `claude plugin update reviewgate@reviewgate` for you, using whichever
+`claude` it would otherwise hand the chat panel to. Without a `claude` on the machine
+it says so and updates the binary anyway. Restart Claude Code afterwards to apply it.
 
 ## Installing without the script
 

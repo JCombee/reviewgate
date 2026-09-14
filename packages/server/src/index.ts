@@ -162,6 +162,7 @@ export { createApp, SessionStore } from "./app.js";
 export type { AppDeps, CreateSessionBody } from "./app.js";
 export { Session } from "./session.js";
 export { Highlighting, languageFor } from "./highlight.js";
+export { ClaudePathInvalid, resolveClaudePath } from "./claude-path.js";
 export {
   isAlive,
   readServerRecord,

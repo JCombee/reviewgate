@@ -147,10 +147,8 @@ The release must carry ten assets: five binaries (`darwin-arm64`, `darwin-x64`,
 
 ## 8. Afterwards
 
-Report to the user: the version, the release URL, and what an existing install has to
-do — `reviewgate update` for the binary, and `claude plugin marketplace update
-reviewgate` plus `claude plugin update reviewgate@reviewgate` when the release changed
-the plugin's hook, command or skill.
+Report to the user: the version, the release URL, and that `reviewgate update` on an
+existing install brings both the binary and the plugin current in one go.
 
 If the machine has ReviewGate installed, confirm the release is really reachable:
 

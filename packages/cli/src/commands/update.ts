@@ -1,19 +1,29 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { REPO, VERSION } from "@reviewgate/core";
+import { ClaudePathInvalid, resolveClaudePath } from "@reviewgate/server";
 import { UsageError } from "../args.js";
 
+const execFileAsync = promisify(execFile);
+
 /**
- * `reviewgate update` — replaces this binary with the newest release.
+ * `reviewgate update` — replaces this binary with the newest release, then makes sure
+ * the Claude Code plugin is current too.
  *
- * The same three steps the installer takes: resolve the latest tag, download the
- * asset for this platform, check its SHA-256. Only then does the running binary get
- * replaced, and never in place: the new file is written next to it and moved over the
- * old one, so a failed download leaves a working install behind.
+ * The same three steps the installer takes for the binary: resolve the latest tag,
+ * download the asset for this platform, check its SHA-256. Only then does the running
+ * binary get replaced, and never in place: the new file is written next to it and
+ * moved over the old one, so a failed download leaves a working install behind.
  *
  * A build from source (`npm run build`) has no binary to replace and says so.
+ *
+ * The plugin is a separate thing, managed by Claude Code rather than by this binary,
+ * so it is updated best-effort: a missing `claude` or a failed plugin command is
+ * reported and does not turn a successful binary update into a failure.
  */
 export async function cmdUpdate(argv: readonly string[]): Promise<number> {
   let checkOnly = false;
@@ -45,44 +55,88 @@ export async function cmdUpdate(argv: readonly string[]): Promise<number> {
   }
 
   const current = VERSION;
-  if (!wanted && !isNewer(tag, current)) {
-    process.stdout.write(`reviewgate ${current} is up to date.\n`);
-    return 0;
-  }
-
-  process.stdout.write(`reviewgate ${current} -> ${tag}\n`);
+  const binaryUpToDate = !wanted && !isNewer(tag, current);
+  if (binaryUpToDate) process.stdout.write(`reviewgate ${current} is up to date.\n`);
+  else process.stdout.write(`reviewgate ${current} -> ${tag}\n`);
   if (checkOnly) return 0;
 
-  const target = await binaryPath();
-  if (!target) {
-    process.stderr.write(
-      "reviewgate: this is a build from source, not an installed binary.\n" +
-        "Update it with git pull && npm install && npm run build.\n",
-    );
-    return 1;
+  if (!binaryUpToDate) {
+    const target = await binaryPath();
+    if (!target) {
+      process.stderr.write(
+        "reviewgate: this is a build from source, not an installed binary.\n" +
+          "Update it with git pull && npm install && npm run build.\n",
+      );
+      await updatePlugin();
+      return 1;
+    }
+
+    const asset = assetName();
+    const url = `https://github.com/${REPO}/releases/download/${tag}/${asset}`;
+
+    process.stdout.write(`Downloading ${asset}...\n`);
+    const [body, expected] = await Promise.all([download(url), downloadText(`${url}.sha256`)]);
+    if (!body || expected === null) {
+      process.stderr.write(`reviewgate: ${tag} has no ${asset}.\n`);
+      return 1;
+    }
+
+    const actual = createHash("sha256").update(body).digest("hex");
+    const want = expected.trim().split(/\s+/)[0] ?? "";
+    if (actual !== want) {
+      process.stderr.write(`reviewgate: checksum mismatch, refusing to install.\n`);
+      return 1;
+    }
+
+    await replaceSelf(target, body);
+    process.stdout.write(`reviewgate ${tag} installed at ${target}\n`);
   }
 
-  const asset = assetName();
-  const url = `https://github.com/${REPO}/releases/download/${tag}/${asset}`;
-
-  process.stdout.write(`Downloading ${asset}...\n`);
-  const [body, expected] = await Promise.all([download(url), downloadText(`${url}.sha256`)]);
-  if (!body || expected === null) {
-    process.stderr.write(`reviewgate: ${tag} has no ${asset}.\n`);
-    return 1;
+  const pluginUpdated = await updatePlugin();
+  if (!binaryUpToDate || pluginUpdated) {
+    process.stdout.write("Restart Claude Code so the gate picks up the new version.\n");
   }
-
-  const actual = createHash("sha256").update(body).digest("hex");
-  const want = expected.trim().split(/\s+/)[0] ?? "";
-  if (actual !== want) {
-    process.stderr.write(`reviewgate: checksum mismatch, refusing to install.\n`);
-    return 1;
-  }
-
-  await replaceSelf(target, body);
-  process.stdout.write(`reviewgate ${tag} installed at ${target}\n`);
-  process.stdout.write("Restart Claude Code so the gate picks up the new version.\n");
   return 0;
+}
+
+/**
+ * Brings the Claude Code plugin to whatever `main` on the marketplace has, mirroring
+ * `claude plugin marketplace update reviewgate && claude plugin update
+ * reviewgate@reviewgate`. Best-effort: no `claude` on the machine, or a plugin command
+ * failing, is reported and does not fail the update as a whole — the binary is already
+ * in place by the time this runs.
+ */
+async function updatePlugin(): Promise<boolean> {
+  let claude: string | null;
+  try {
+    claude = resolveClaudePath();
+  } catch (err) {
+    if (!(err instanceof ClaudePathInvalid)) throw err;
+    process.stderr.write(`reviewgate: ${err.message}\n`);
+    return false;
+  }
+  if (!claude) {
+    process.stdout.write("No claude found on this machine; skipping the plugin update.\n");
+    return false;
+  }
+
+  process.stdout.write("Updating the Claude Code plugin...\n");
+  const steps = [
+    ["plugin", "marketplace", "update", "reviewgate"],
+    ["plugin", "update", "reviewgate@reviewgate"],
+  ];
+  for (const args of steps) {
+    try {
+      await execFileAsync(claude, args);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(
+        `reviewgate: could not update the plugin (claude ${args.join(" ")}): ${message}\n`,
+      );
+      return false;
+    }
+  }
+  return true;
 }
 
 export interface LatestTag {
