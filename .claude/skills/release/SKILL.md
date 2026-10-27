@@ -142,24 +142,20 @@ gh run watch $(gh run list --limit 1 --json databaseId --jq '.[0].databaseId') -
 gh release view v<version> --json assets --jq '.assets[] | "\(.name) \(.size)"'
 ```
 
-The workflow publishes the release as a **draft**. A draft does not show up on the
-releases page, is not `latest`, and `reviewgate update` cannot see it — nothing ships
-to anyone until it is published by hand.
+The workflow publishes the release the moment the build passes: it is `latest` and
+`reviewgate update` offers it to everyone straight away. There is no draft step, so
+the verification in step 5 is the last gate before users can download it.
 
 The release must carry ten assets: five binaries (`darwin-arm64`, `darwin-x64`,
 `linux-x64`, `linux-arm64`, `win32-x64.exe`) each with a `.sha256`.
 
-## 8. Test the draft, then publish
+## 8. Check the live release
 
-This is the point of the draft: try the actual asset, through the actual updater,
-before anyone else can download it. A plain `reviewgate update` cannot see a draft —
-that is the point, not a bug to work around — but `--version` combined with a
-`GH_TOKEN` (the same variable `gh` itself uses) makes the updater look the release up
-through the API instead, which does show a draft's assets to an authenticated
-maintainer:
+Try the actual asset through the actual updater:
 
 ```bash
-GH_TOKEN=$(gh auth token) reviewgate update --version v<version>
+reviewgate update --check
+reviewgate update --version v<version>
 reviewgate --version
 ```
 
@@ -168,26 +164,13 @@ For a release that touches the hook, the server or the web UI, also run it for r
 open a review, or point a plugin at this binary — rather than trusting `--version`
 alone.
 
-Once it looks right:
-
-```bash
-gh release edit v<version> --draft=false
-```
-
-A release that fails the check is not published. Fix the cause on `main`, cut the next
-patch version, and leave this tag as an unpublished draft — do not edit it into shape
-after the fact and publish it late.
+A release that fails the check is already out. Fix the cause on `main` and cut the
+next patch version — do not edit the published release into shape after the fact.
 
 ## 9. Afterwards
 
 Report to the user: the version, the release URL, and that `reviewgate update` on an
 existing install brings both the binary and the plugin current in one go.
-
-Confirm the now-published release is reachable:
-
-```bash
-reviewgate update --check
-```
 
 ## When the workflow fails
 

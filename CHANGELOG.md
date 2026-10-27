@@ -17,6 +17,12 @@ Entries describe what changed for someone using the gate, not which files moved.
   repo's `pre-commit` hook still runs. Only you can switch it on: the command refuses
   to run inside Claude Code, and the hook denies the agent trying it.
 
+### Changed
+
+- Releases are published as soon as their build passes, instead of waiting as a draft
+  for a maintainer to publish them by hand. `reviewgate update` sees a new release the
+  moment the workflow finishes.
+
 ## [0.3.0] - 2026-09-14
 
 ### Added
