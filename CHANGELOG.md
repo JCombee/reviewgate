@@ -8,6 +8,13 @@ Entries describe what changed for someone using the gate, not which files moved.
 
 ## [Unreleased]
 
+### Added
+
+- `reviewgate auto-approve on|off` switches the review off for one checkout, so Claude
+  can commit on its own while you are away. `--no-verify` is still refused and the
+  repo's `pre-commit` hook still runs. Only you can switch it on: the command refuses
+  to run inside Claude Code, and the hook denies the agent trying it.
+
 ## [0.3.0] - 2026-09-14
 
 ### Added

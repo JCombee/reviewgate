@@ -8,6 +8,7 @@ import {
   NodeGitClient,
   readApproval,
   ReviewStore,
+  setAutoApprove,
   TestRepo,
   type Review,
 } from "@reviewgate/core";
@@ -292,6 +293,94 @@ describe("hook — blocking", () => {
     const hash = rounds[rounds.length - 1]?.diffHash ?? "";
     expect(await readApproval(gitDir, hash)).toBeNull();
   }, 60_000);
+});
+
+describe("hook — auto-approve", () => {
+  const gitDir = (): string => path.join(repo.root, ".git");
+
+  it("lets a commit straight through without opening a review", async () => {
+    await stageChange();
+    await setAutoApprove(gitDir(), true);
+
+    expect(await hookOutput('git commit -m "fix: something"')).toBeNull();
+    expect(await readServerRecord(gitDir())).toBeNull();
+    expect(await new ReviewStore(gitDir()).list()).toEqual([]);
+  });
+
+  it("still refuses --no-verify", async () => {
+    await stageChange();
+    await setAutoApprove(gitDir(), true);
+
+    const out = await hookOutput('git commit --no-verify -m "x"');
+    expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
+  });
+
+  it.skipIf(process.platform === "win32")("still runs the repo's pre-commit hook", async () => {
+    await stageChange();
+    await setAutoApprove(gitDir(), true);
+    await repo.write(".git/hooks/pre-commit", "#!/bin/sh\necho 'lint failed' >&2\nexit 1\n");
+    await fs.chmod(repo.abs(".git/hooks/pre-commit"), 0o755);
+
+    const out = await hookOutput('git commit -m "fix: something"');
+    expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(out?.hookSpecificOutput?.permissionDecisionReason).toContain("lint failed");
+  });
+
+  it("refuses the agent switching it on", async () => {
+    const out = await hookOutput("reviewgate auto-approve on");
+    expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(out?.hookSpecificOutput?.permissionDecisionReason).toContain("only the user");
+  });
+
+  it("lets the agent switch it off or ask for its state", async () => {
+    expect(await hookOutput("reviewgate auto-approve off")).toBeNull();
+    expect(await hookOutput("reviewgate auto-approve")).toBeNull();
+  });
+});
+
+describe("reviewgate auto-approve", () => {
+  function run(
+    args: string[],
+    env: NodeJS.ProcessEnv,
+  ): Promise<{ stdout: string; stderr: string; code: number | null }> {
+    const child = spawn(process.execPath, [CLI, "auto-approve", ...args], {
+      cwd: repo.root,
+      windowsHide: true,
+      env: { ...process.env, ...env },
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (c) => {
+      stdout += String(c);
+    });
+    child.stderr.on("data", (c) => {
+      stderr += String(c);
+    });
+    return new Promise((resolve) => {
+      child.on("close", (code) => resolve({ stdout, stderr, code }));
+    });
+  }
+
+  it("switches on from a plain terminal, reports it, and switches off", async () => {
+    const terminal = { CLAUDECODE: "" };
+
+    expect((await run([], terminal)).stdout).toContain("Auto-approve is off");
+
+    const on = await run(["on"], terminal);
+    expect(on.code).toBe(0);
+    expect((await run(["status"], terminal)).stdout).toContain("Auto-approve is on");
+
+    const off = await run(["off"], terminal);
+    expect(off.code).toBe(0);
+    expect((await run([], terminal)).stdout).toContain("Auto-approve is off");
+  });
+
+  it("refuses to switch on from inside Claude Code", async () => {
+    const res = await run(["on"], { CLAUDECODE: "1" });
+    expect(res.code).toBe(1);
+    expect(res.stderr).toContain("your own terminal");
+    expect((await run([], { CLAUDECODE: "1" })).stdout).toContain("Auto-approve is off");
+  });
 });
 
 describe("hook — pre-commit", () => {

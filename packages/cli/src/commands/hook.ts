@@ -4,11 +4,13 @@ import {
   analyzeCommand,
   consumeApproval,
   diffHash,
+  enablesAutoApprove,
   isIgnored,
   loadConfig,
   NodeGitClient,
   parseUnifiedDiff,
   readApproval,
+  readAutoApprove,
   renderApproved,
   renderChangesRequested,
   runPreCommitHook,
@@ -94,6 +96,15 @@ async function decide(
   if (payload.tool_name !== "Bash") return null;
 
   const command = payload.tool_input?.command ?? "";
+  if (enablesAutoApprove(command)) {
+    return {
+      kind: "deny",
+      reason:
+        "Auto-approve lifts the review gate, so only the user can switch it on, from " +
+        "their own terminal. Do not try to enable it; commit as usual and let the review run.",
+    };
+  }
+
   const analysis = analyzeCommand(command);
   if (!analysis.isCommit) return null;
 
@@ -126,6 +137,10 @@ async function decide(
       reason: preCommit.output || "`pre-commit` exited with a non-zero status.",
     };
   }
+
+  // The user switched the gate off for this checkout so the agent can work on its own.
+  // Only after `pre-commit`: auto-approve skips the review, not the repo's own checks.
+  if (await readAutoApprove(info.gitDir)) return null;
 
   const config = await loadConfig(info.root);
 

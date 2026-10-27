@@ -171,7 +171,31 @@ reviewgate open [revision]  read in a review scope and open it
 reviewgate serve            start the server without a review
 reviewgate status           the running server and open reviews
 reviewgate hook             PreToolUse hook: reads hook JSON from stdin and blocks
+reviewgate auto-approve [on|off|status]
+                            let commits in this repo through without a review
 ```
+
+## Letting Claude run on its own
+
+Sometimes you want Claude to work through a task in one project without stopping
+for a review at every commit. Switch the gate off for that checkout:
+
+```bash
+reviewgate auto-approve on       # commits in this repo go through unreviewed
+reviewgate auto-approve          # is it on?
+reviewgate auto-approve off      # back to reviewing every commit
+```
+
+While it is on, `--no-verify` is still refused and the repo's own `pre-commit` hook
+still runs. Only the review is skipped.
+
+The switch lives in `.git/reviewgate/auto-approve.json`, not in `.reviewgate.json`. It
+belongs to this checkout only, is never part of a diff, and does not travel with the
+repo. Only you can turn it on. `reviewgate auto-approve on` refuses to run inside
+Claude Code, and the hook denies any Bash command containing that phrase. Claude may
+turn it off or check its state. This keeps the agent from lifting its own gate by
+accident; it is not a sandbox. An agent that writes that file by hand gets past it,
+the same way it could get past `.reviewgate.json`'s `ignore`.
 
 ## Inside the review
 
@@ -234,7 +258,7 @@ not block the work, at most keep it from being reviewed the way it was meant to 
 
 | Variable                   | Does                                             |
 | -------------------------- | ------------------------------------------------ |
-| `REVIEWGATE_SKIP=1`        | skip the gate entirely                           |
+| `REVIEWGATE_SKIP=1`        | skip the gate entirely (see also `auto-approve`) |
 | `REVIEWGATE_TIMEOUT_MS`    | overrides `timeoutMs`                            |
 | `REVIEWGATE_NO_OPEN=1`     | do not open the browser                          |
 | `REVIEWGATE_AUTO_REVIEW=0` | turn the automatic pass off                      |
@@ -254,6 +278,7 @@ Everything under `.git/reviewgate/`, a path that is already outside version cont
 | `reviews/<id>.json`        | the review: rounds, comments, suggestions, conversation         |
 | `approved/<diffHash>.json` | proof that _this_ diff was approved; lapses after 24 hours      |
 | `server.json`              | port, pid and admin token of the running server                 |
+| `auto-approve.json`        | present while `reviewgate auto-approve` is on                   |
 | `COMMIT_EDITMSG`           | the commit message you adjusted                                 |
 | `hook.log`                 | failures inside the hook                                        |
 | `dedupe.log`               | automatically dismissed suggestions with their similarity score |
