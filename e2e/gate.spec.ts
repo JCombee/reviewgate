@@ -187,7 +187,7 @@ test("happy path: place a comment, the button switches, request changes reaches 
 
     await page.locator("input[aria-label='Summary']").fill("sort out the cache invalidation first");
     await primary(page).click();
-    await expect(page.locator("footer")).toContainText("Changes requested");
+    await expect(page.getByText("Changes requested — the feedback is in the session.")).toBeVisible();
 
     const verdict = await gate.verdict;
     expect(verdict.permissionDecision).toBe("deny");
@@ -212,7 +212,7 @@ test("approve path: without open comments the hook lets the commit through", asy
 
     await page.locator("input[aria-label='Summary']").fill("the shape holds");
     await primary(page).click();
-    await expect(page.locator("footer")).toContainText("Approved");
+    await expect(page.getByText("Approved — the commit goes through.")).toBeVisible();
 
     const verdict = await gate.verdict;
     expect(verdict.permissionDecision).toBe("allow");
