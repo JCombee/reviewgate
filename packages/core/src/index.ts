@@ -65,6 +65,8 @@ export {
   writeApproval,
 } from "./review/approval.js";
 export type { Approval } from "./review/approval.js";
+export { enablesAutoApprove, readAutoApprove, setAutoApprove } from "./review/autoApprove.js";
+export type { AutoApprove } from "./review/autoApprove.js";
 export { waitForDecision } from "./hook/wait.js";
 export type { WaitOptions, WaitResult } from "./hook/wait.js";
 export { resolveHooksDir, runPreCommitHook } from "./hook/precommit.js";

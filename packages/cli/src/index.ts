@@ -1,5 +1,6 @@
 import { GitError, VERSION } from "@reviewgate/core";
 import { UsageError } from "./args.js";
+import { cmdAutoApprove } from "./commands/autoApprove.js";
 import { cmdHook } from "./commands/hook.js";
 import { cmdOpen } from "./commands/open.js";
 import { cmdServe, cmdStatus } from "./commands/serve.js";
@@ -23,6 +24,9 @@ Usage:
   reviewgate serve            start the server without a review
   reviewgate status           the running server and open reviews
   reviewgate hook             PreToolUse hook: reads hook JSON from stdin and blocks
+  reviewgate auto-approve [on|off|status]
+                              let commits in this repo through without a review;
+                              "on" only works from your own terminal
   reviewgate update           replace this binary with the newest release
       --check                 only report whether a newer release exists
       --version <tag>         install exactly this tag
@@ -59,6 +63,8 @@ export async function main(argv: readonly string[]): Promise<number> {
         return await cmdHook(cwd);
       case "update":
         return await cmdUpdate(rest);
+      case "auto-approve":
+        return await cmdAutoApprove(rest, cwd);
       default:
         process.stderr.write(`reviewgate: unknown command "${cmd}"\n\n${USAGE}`);
         return 2;
