@@ -103,6 +103,56 @@ describe("analyzeCommand", () => {
       expected: { isCommit: false },
     },
     {
+      name: "add of specific paths is replayed, not widened to the working tree",
+      command: `git add src/a.ts "dir with space/b.ts" && git commit -m "x"`,
+      expected: { scope: "working", stage: [["add", "src/a.ts", "dir with space/b.ts"]] },
+    },
+    {
+      name: "commit -a stages the tracked files",
+      command: `git add new.ts && git commit -am "x"`,
+      expected: { stage: [["add", "new.ts"], ["add", "-u"]] },
+    },
+    {
+      name: "rm is replayed with --cached, so the replay deletes nothing",
+      command: `git -C sub rm -r old && git commit -m "x"`,
+      expected: { stage: [["-C", "sub", "rm", "--cached", "-r", "old"]] },
+    },
+    {
+      name: "a plain commit stages nothing",
+      command: `git commit -m "x"`,
+      expected: { scope: "staged", stage: [] },
+    },
+    {
+      name: "a git add after the commit does not count",
+      command: `git commit -m "x" && git add -A`,
+      expected: { scope: "staged", stage: [] },
+    },
+    {
+      name: "interactive add cannot be replayed",
+      command: `git add -p && git commit -m "x"`,
+      expected: { scope: "working", stage: null },
+    },
+    {
+      name: "bundled interactive add cannot be replayed",
+      command: `git add -vp src && git commit -m "x"`,
+      expected: { stage: null },
+    },
+    {
+      name: "a path that looks like a flag after -- is fine",
+      command: `git add -- -p && git commit -m "x"`,
+      expected: { stage: [["add", "--", "-p"]] },
+    },
+    {
+      name: "a cd before the add cannot be replayed",
+      command: `cd sub && git add a.ts && git commit -m "x"`,
+      expected: { stage: null },
+    },
+    {
+      name: "mv cannot be replayed",
+      command: `git mv a.ts b.ts && git commit -m "x"`,
+      expected: { stage: null },
+    },
+    {
       name: "push is not a gate",
       command: `git push origin main`,
       expected: { isCommit: false },

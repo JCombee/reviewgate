@@ -148,9 +148,10 @@ install.
 
 ## Recommended project settings
 
-Put in your project's `CLAUDE.md` that staging and committing should be separate
-commands. With `git add -A && git commit` nothing is in the index at hook time, so the
-gate reviews the whole working tree instead of what is being committed.
+Staging and committing in one command is fine: with `git add src/a.ts && git commit`
+the gate replays the `git add` on a copy of the index and reviews exactly what the
+commit will contain. Only a chain it cannot replay, such as `git add -p` or a `cd`
+first, falls back to the whole working tree.
 
 Add `--no-verify` to your project's deny rules. The gate already refuses it with a
 clear message, but a deny rule saves the attempt.

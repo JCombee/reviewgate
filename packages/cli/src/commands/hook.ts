@@ -13,10 +13,12 @@ import {
   readAutoApprove,
   renderApproved,
   renderChangesRequested,
+  rewriteWithMessageFile,
   runPreCommitHook,
   waitForDecision,
   type CommitAnalysis,
   type DiffOptions,
+  type ReviewScope,
 } from "@reviewgate/core";
 import {
   createSession,
@@ -144,8 +146,8 @@ async function decide(
 
   const config = await loadConfig(info.root);
 
-  const options: DiffOptions = { context: 5, includeUntracked: analysis.scope === "working" };
-  const patch = await git.rawDiff(analysis.scope, options);
+  const { scope, options } = await reviewTarget(git, analysis, cwd);
+  const patch = await git.rawDiff(scope, options);
   if (patch.trim() === "") return null;
 
   // Ignored paths and diffs that are too small go through unreviewed (§2). We count on
@@ -161,7 +163,7 @@ async function decide(
   const approval = await readApproval(info.gitDir, hash);
   if (approval) {
     if (approval.editedCommitMessage && !usesMessageFile(analysis, info.gitDir)) {
-      return denyForEditedMessage(info.gitDir, approval.editedCommitMessage);
+      return denyForEditedMessage(command, info.gitDir, approval.editedCommitMessage);
     }
     await consumeApproval(info.gitDir, hash);
     return approval.summary ? { kind: "allow", context: approval.summary } : { kind: "allow" };
@@ -169,7 +171,7 @@ async function decide(
 
   const record = await ensureServer(cwd, info.gitDir, started);
   const session = await createSession(record, {
-    scope: analysis.scope,
+    scope,
     options,
     cwd,
     commitMessage: analysis.message,
@@ -204,11 +206,36 @@ async function decide(
 
   const round = result.review.rounds[result.review.rounds.length - 1];
   const edited = round?.editedCommitMessage ?? null;
-  if (edited) return denyForEditedMessage(info.gitDir, edited);
+  if (edited) return denyForEditedMessage(command, info.gitDir, edited);
 
   await consumeApproval(info.gitDir, hash);
   const context = renderApproved(result.review);
   return context ? { kind: "allow", context } : { kind: "allow" };
+}
+
+/**
+ * What the commit is going to contain. A `git add` earlier in the chain has not run
+ * yet at hook time, so it is replayed on a copy of the index and only that tree is
+ * reviewed, leaving unstaged and untracked changes out. When the chain cannot be
+ * replayed, the whole working tree is the safe overestimate.
+ */
+async function reviewTarget(
+  git: NodeGitClient,
+  analysis: CommitAnalysis,
+  cwd: string,
+): Promise<{ scope: ReviewScope; options: DiffOptions }> {
+  if (analysis.stage && analysis.stage.length > 0) {
+    try {
+      const tree = await git.stagedTree(analysis.stage, cwd);
+      return { scope: analysis.amend ? "amend" : "staged", options: { context: 5, tree } };
+    } catch (err) {
+      await logError(cwd, err);
+    }
+  }
+  return {
+    scope: analysis.scope,
+    options: { context: 5, includeUntracked: analysis.scope === "working" },
+  };
 }
 
 /**
@@ -219,7 +246,11 @@ async function decide(
  * attempt with `-F`. The approval artifact is already there, so that second attempt
  * goes through without a review.
  */
-async function denyForEditedMessage(gitDir: string, message: string): Promise<Verdict> {
+async function denyForEditedMessage(
+  command: string,
+  gitDir: string,
+  message: string,
+): Promise<Verdict> {
   const file = path.join(gitDir, "reviewgate", "COMMIT_EDITMSG");
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, message.endsWith("\n") ? message : `${message}\n`, "utf8");
@@ -228,7 +259,8 @@ async function denyForEditedMessage(gitDir: string, message: string): Promise<Ve
     kind: "deny",
     reason:
       "The review was approved, but the reviewer adjusted the commit message.\n\n" +
-      `Commit again with exactly this message:\n\n    git commit -F ${toPosix(file)}\n\n` +
+      // The `git add` in the chain never ran, so the retry has to stage again too.
+      `Commit again with exactly this command:\n\n    ${rewriteWithMessageFile(command, toPosix(file))}\n\n` +
       "The approval still stands, so that attempt goes through without a new review.",
   };
 }

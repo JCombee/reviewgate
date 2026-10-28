@@ -25,9 +25,9 @@ The feedback comes back as markdown, grouped per file, with line numbers.
 ## What not to do
 
 - Do not use `--no-verify`. It is refused with a separate message.
-- Do not stage and commit in one command when you can separate them. With
-  `git add -A && git commit` nothing is in the index at hook time, so the gate reviews
-  the entire working tree.
+- Do not use `git add -p`, or `cd` before `git add`, in the commit command. The gate
+  cannot replay those and then reviews the entire working tree. A plain
+  `git add <paths> && git commit` shows the reviewer exactly what gets committed.
 - Do not write into `.git/reviewgate/` yourself.
 
 ## Opening a review without committing

@@ -185,7 +185,7 @@ export function createApp(deps: AppDeps, store: SessionStore): Hono {
     if (!path || (side !== "old" && side !== "new")) {
       return c.json({ error: "path and side are required" }, 400);
     }
-    const content = await s.git.fileContent(path, side, s.scope);
+    const content = await s.git.fileContent(path, side, s.scope, s.options);
     if (content === null) return c.json({ error: "file not found" }, 404);
     return c.json({ path, side, content });
   });

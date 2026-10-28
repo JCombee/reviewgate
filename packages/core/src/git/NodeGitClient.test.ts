@@ -206,3 +206,58 @@ describe("NodeGitClient — amend scope", () => {
     }
   });
 });
+
+describe("NodeGitClient — staging that has not run yet", () => {
+  let repo: TestRepo;
+  let git: NodeGitClient;
+
+  beforeAll(async () => {
+    repo = await TestRepo.create();
+    await repo.write("a.ts", "a\n");
+    await repo.write("b.ts", "b\n");
+    await repo.write("gone.ts", "gone\n");
+    await repo.addAll();
+    await repo.commit("base");
+
+    await repo.write("a.ts", "a2\n");
+    await repo.write("b.ts", "b2\n");
+    await repo.write("new.ts", "new\n");
+    await repo.write("stray.ts", "untracked and not added\n");
+    git = await NodeGitClient.open(repo.root);
+  });
+
+  afterAll(async () => {
+    await repo.cleanup();
+  });
+
+  it("reviews only what the replayed git add stages", async () => {
+    const tree = await git.stagedTree([["add", "a.ts", "new.ts"]], repo.root);
+    const diff = await git.diff("staged", { tree });
+    expect(diff.files.map((f) => f.path)).toEqual(["a.ts", "new.ts"]);
+    expect(await git.fileContent("a.ts", "new", "staged", { tree })).toBe("a2\n");
+  });
+
+  it("leaves the real index and the working tree alone", async () => {
+    await git.stagedTree([["add", "-A"], ["rm", "--cached", "gone.ts"]], repo.root);
+    expect((await git.diff("staged")).files).toEqual([]);
+    expect(await repo.git("status", "--porcelain")).toContain("?? stray.ts");
+    expect(await git.fileContent("gone.ts", "new", "working")).toBe("gone\n");
+  });
+
+  it("yields the same patch as staging for real", async () => {
+    const tree = await git.stagedTree([["add", "b.ts"], ["rm", "--cached", "gone.ts"]], repo.root);
+    const simulated = await git.rawDiff("staged", { tree });
+
+    await repo.add("b.ts");
+    await repo.git("rm", "--cached", "gone.ts");
+    try {
+      expect(simulated).toBe(await git.rawDiff("staged"));
+    } finally {
+      await repo.git("reset");
+    }
+  });
+
+  it("fails when the replay fails, so the caller can fall back", async () => {
+    await expect(git.stagedTree([["add", "does-not-exist.ts"]], repo.root)).rejects.toThrow();
+  });
+});

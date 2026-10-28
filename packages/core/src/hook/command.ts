@@ -11,8 +11,18 @@ import type { ReviewScope } from "../types.js";
 export interface CommitAnalysis {
   /** Does the command contain a `git commit`? If not, the hook lets it through. */
   isCommit: boolean;
-  /** The scope that should be reviewed. */
+  /**
+   * The scope to review when `stage` cannot be replayed: the whole working tree once
+   * anything gets staged in the chain, as the safe overestimate.
+   */
   scope: ReviewScope;
+  /**
+   * The commands in the chain that stage something before the commit, as git argv
+   * without the leading `git`, in order; `commit -a` contributes `add -u`. They have
+   * not run yet at hook time. Null when the chain stages in a way that cannot be
+   * replayed safely, such as `git add -p` or a `cd` first.
+   */
+  stage: string[][] | null;
   /** `--amend` is in the command. */
   amend: boolean;
   /** `--no-verify` or `-n`: bypassing the gate. Block it with an explanation (§2). */
@@ -101,10 +111,10 @@ export function splitCommand(command: string): string[][] {
   return segments;
 }
 
-/** Is this segment a `git` invocation of this subcommand? */
-function isGitSubcommand(argv: readonly string[], sub: string): boolean {
+/** Index of the subcommand in a `git` invocation, or -1 when this is not git. */
+function gitSubcommandIndex(argv: readonly string[]): number {
   const first = argv[0];
-  if (first !== "git" && first !== "git.exe" && !first?.endsWith("/git")) return false;
+  if (first !== "git" && first !== "git.exe" && !first?.endsWith("/git")) return -1;
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i] as string;
     // Skip global options before the subcommand: `git -c x=y commit`.
@@ -113,9 +123,57 @@ function isGitSubcommand(argv: readonly string[], sub: string): boolean {
       continue;
     }
     if (arg.startsWith("-")) continue;
-    return arg === sub;
+    return i;
+  }
+  return -1;
+}
+
+/** Is this segment a `git` invocation of this subcommand? */
+function isGitSubcommand(argv: readonly string[], sub: string): boolean {
+  const i = gitSubcommandIndex(argv);
+  return i !== -1 && argv[i] === sub;
+}
+
+/**
+ * Does this `git add` prompt for input or read stdin? Replaying it in the hook would
+ * hang, so the chain counts as not replayable.
+ */
+function addIsInteractive(args: readonly string[]): boolean {
+  for (const arg of args) {
+    if (arg === "--") return false;
+    if (["-p", "--patch", "-i", "--interactive", "-e", "--edit"].includes(arg)) return true;
+    if (arg.startsWith("--pathspec-from-file")) return true;
+    if (/^-[a-zA-Z]{2,}$/.test(arg) && /[pie]/.test(arg)) return true;
   }
   return false;
+}
+
+/**
+ * The staging commands that run before the commit, replayable against a copy of the
+ * index. `git rm` gets `--cached`, so the replay never deletes a file from disk.
+ */
+function stagingSteps(before: readonly string[][]): string[][] | null {
+  const steps: string[][] = [];
+  for (const argv of before) {
+    // Relative paths after a `cd` no longer resolve from the hook's directory.
+    if (argv[0] === "cd" || argv[0] === "pushd" || argv[0] === "popd") return null;
+
+    const i = gitSubcommandIndex(argv);
+    if (i === -1) continue;
+    const sub = argv[i];
+    const args = argv.slice(i + 1);
+
+    if (sub === "add") {
+      if (addIsInteractive(args)) return null;
+      steps.push(argv.slice(1));
+    } else if (sub === "rm") {
+      steps.push([...argv.slice(1, i + 1), "--cached", ...args]);
+    } else if (sub === "mv") {
+      // Moves files on disk; there is no index-only variant to replay.
+      return null;
+    }
+  }
+  return steps;
 }
 
 export function analyzeCommand(command: string): CommitAnalysis {
@@ -130,6 +188,7 @@ export function analyzeCommand(command: string): CommitAnalysis {
       noVerify: false,
       message: null,
       messageFile: null,
+      stage: [],
       segments,
     };
   }
@@ -170,10 +229,11 @@ export function analyzeCommand(command: string): CommitAnalysis {
     }
   }
 
-  // A `git add` earlier in the chain also stages whatever is lying around now.
-  const addsBefore = segments.some((s) => isGitSubcommand(s, "add"));
+  const steps = stagingSteps(segments.slice(0, segments.indexOf(commit)));
+  const stage = steps && stagesAll ? [...steps, ["add", "-u"]] : steps;
+  const staging = stage === null || stage.length > 0;
 
-  const scope: ReviewScope = amend ? "amend" : stagesAll || addsBefore ? "working" : "staged";
+  const scope: ReviewScope = amend ? "amend" : staging ? "working" : "staged";
 
   return {
     isCommit: true,
@@ -183,6 +243,7 @@ export function analyzeCommand(command: string): CommitAnalysis {
     // git joins several -m values with a blank line in between.
     message: messages.length > 0 ? messages.join("\n\n") : null,
     messageFile,
+    stage,
     segments,
   };
 }

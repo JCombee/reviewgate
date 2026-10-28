@@ -10,7 +10,9 @@ import {
   ReviewStore,
   setAutoApprove,
   TestRepo,
+  type DiffOptions,
   type Review,
+  type ReviewScope,
 } from "@reviewgate/core";
 import { readServerRecord } from "@reviewgate/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -89,6 +91,12 @@ async function hookOutput(command: string, env?: NodeJS.ProcessEnv): Promise<Hoo
   return stdout.trim() === "" ? null : (JSON.parse(stdout) as HookOutput);
 }
 
+/** The scope and diff options a session is created with; they decide which review it joins. */
+interface SessionTarget {
+  scope: ReviewScope;
+  options?: DiffOptions;
+}
+
 async function stageChange(): Promise<void> {
   await repo.write("src/service.ts", "export const a = 1;\nexport const b = 22;\n");
   await repo.addAll();
@@ -106,7 +114,11 @@ async function waitForReview(): Promise<Review> {
 }
 
 /** Decide through the running server, the way the UI does. */
-async function decide(decision: "approve" | "request_changes", summary?: string): Promise<void> {
+async function decide(
+  decision: "approve" | "request_changes",
+  summary?: string,
+  target: SessionTarget = { scope: "staged" },
+): Promise<void> {
   const record = await readServerRecord(path.join(repo.root, ".git"));
   if (!record) throw new Error("no server.json");
 
@@ -114,7 +126,7 @@ async function decide(decision: "approve" | "request_changes", summary?: string)
   const health = await fetch(`http://127.0.0.1:${record.port}/healthz`);
   expect(health.ok).toBe(true);
 
-  const session = await sessionIdOf(record.port, record.serverToken);
+  const session = await sessionIdOf(record.port, record.serverToken, target);
   const res = await fetch(`http://127.0.0.1:${record.port}/api/review/${session.id}/decision`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${session.token}` },
@@ -128,11 +140,15 @@ async function decide(decision: "approve" | "request_changes", summary?: string)
  * token lets us: a second session on the same diff hangs off the same persistent
  * review, so the decision lands in the right place.
  */
-async function sessionIdOf(port: number, serverToken: string): Promise<{ id: string; token: string }> {
+async function sessionIdOf(
+  port: number,
+  serverToken: string,
+  target: SessionTarget = { scope: "staged" },
+): Promise<{ id: string; token: string }> {
   const res = await fetch(`http://127.0.0.1:${port}/api/sessions`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${serverToken}` },
-    body: JSON.stringify({ scope: "staged", cwd: repo.root }),
+    body: JSON.stringify({ ...target, cwd: repo.root }),
   });
   const data = (await res.json()) as { id: string; token: string };
   return data;
@@ -292,6 +308,30 @@ describe("hook — blocking", () => {
     const rounds = review?.rounds ?? [];
     const hash = rounds[rounds.length - 1]?.diffHash ?? "";
     expect(await readApproval(gitDir, hash)).toBeNull();
+  }, 60_000);
+});
+
+describe("hook — git add in the same command", () => {
+  it("reviews only what gets staged, not the rest of the working tree", async () => {
+    await repo.write("src/service.ts", "export const a = 1;\nexport const b = 22;\n");
+    await repo.write("src/unrelated.ts", "not part of this commit\n");
+    const hook = runHook('git add src/service.ts && git commit -m "fix: b"');
+
+    const review = await waitForReview();
+    // Only a session on the same tree joins the hook's review.
+    const git = await NodeGitClient.open(repo.root);
+    const tree = await git.stagedTree([["add", "src/service.ts"]], repo.root);
+    await decide("approve", undefined, { scope: "staged", options: { context: 5, tree } });
+    const out = JSON.parse((await hook.done).stdout) as HookOutput;
+    expect(out.hookSpecificOutput?.permissionDecision).toBe("allow");
+
+    // Nothing ran for real, the hook only replayed the add on a copy of the index.
+    expect((await git.diff("staged")).files).toEqual([]);
+
+    await repo.add("src/service.ts");
+    const round = review.rounds[review.rounds.length - 1];
+    expect(round?.scope).toBe("staged");
+    expect(round?.diffHash).toBe(diffHash(await git.rawDiff("staged", { context: 5 })));
   }, 60_000);
 });
 

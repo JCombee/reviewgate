@@ -8,6 +8,15 @@ Entries describe what changed for someone using the gate, not which files moved.
 
 ## [Unreleased]
 
+### Fixed
+
+- `git add <paths> && git commit` now reviews only what gets committed. The gate used to
+  show the whole working tree, unstaged and untracked files included; it now replays
+  the `git add` (and `git rm`, and `commit -a`) on a copy of the index. `git add -p`
+  and a `cd` before the add still fall back to the working tree.
+- When the reviewer edits the commit message, the retry command the agent gets now
+  stages again too, so it commits the approved changes instead of an empty index.
+
 ## [0.4.0] - 2026-10-27
 
 ### Added

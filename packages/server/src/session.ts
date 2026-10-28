@@ -109,7 +109,7 @@ export class Session {
     // to their new place, or go outdated (§5). The store deliberately has not written
     // the round yet, so the new round and the moved comments land on disk together.
     const anchored = newRound
-      ? await store.save(await reanchor(review, input.git, input.scope))
+      ? await store.save(await reanchor(review, input.git, input.scope, input.options))
       : review;
 
     const session = new Session(
@@ -402,10 +402,10 @@ export class Session {
     const [oldContent, newContent] = await Promise.all([
       file.binary || file.oldPath === null
         ? Promise.resolve(null)
-        : this.git.fileContent(file.oldPath, "old", this.scope),
+        : this.git.fileContent(file.oldPath, "old", this.scope, this.options),
       file.binary || file.newPath === null
         ? Promise.resolve(null)
-        : this.git.fileContent(file.newPath, "new", this.scope),
+        : this.git.fileContent(file.newPath, "new", this.scope, this.options),
     ]);
 
     // One palette per file, shared by both sides.
@@ -465,7 +465,12 @@ export class DecisionConflict extends Error {
  * Carries a review's comments over to the new round. File content is fetched once per
  * path and cached: a review can hold dozens of comments in the same file.
  */
-async function reanchor(review: Review, git: GitClient, scope: ReviewScope): Promise<Review> {
+async function reanchor(
+  review: Review,
+  git: GitClient,
+  scope: ReviewScope,
+  options: DiffOptions,
+): Promise<Review> {
   const keys = new Set<string>();
   for (const c of review.comments) {
     if (c.scope === "line" && c.status === "open" && c.path) keys.add(`${c.side}:${c.path}`);
@@ -476,7 +481,7 @@ async function reanchor(review: Review, git: GitClient, scope: ReviewScope): Pro
   for (const key of keys) {
     const [side, ...rest] = key.split(":");
     const filePath = rest.join(":");
-    const content = await git.fileContent(filePath, side as Side, scope);
+    const content = await git.fileContent(filePath, side as Side, scope, options);
     cache.set(key, content === null ? null : splitLines(content));
   }
 

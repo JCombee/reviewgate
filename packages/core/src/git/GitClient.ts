@@ -22,6 +22,11 @@ export interface DiffOptions {
   includeUntracked?: boolean;
   /** For scope "range": the revision expression, e.g. `main...HEAD`. */
   range?: string;
+  /**
+   * For scopes "staged" and "amend": a tree that stands in for the index, such as the
+   * one `stagedTree` builds for a commit whose `git add` has not run yet.
+   */
+  tree?: string;
 }
 
 /**
@@ -35,7 +40,17 @@ export interface GitClient {
   /** Parsed, typed diff for a scope. */
   diff(scope: ReviewScope, opts?: DiffOptions): Promise<Diff>;
   /** Full file content on one side of the diff, for context expansion (§7). */
-  fileContent(path: string, side: "old" | "new", scope: ReviewScope): Promise<string | null>;
+  fileContent(
+    path: string,
+    side: "old" | "new",
+    scope: ReviewScope,
+    opts?: DiffOptions,
+  ): Promise<string | null>;
+  /**
+   * The tree the index would hold after these git commands (argv without `git`), run
+   * from `cwd` against a throwaway copy of the index. The real index stays untouched.
+   */
+  stagedTree(steps: readonly (readonly string[])[], cwd: string): Promise<string>;
   /** Untracked files as standalone "added" entries. */
   untrackedFiles(opts?: DiffOptions): Promise<DiffFile[]>;
 }

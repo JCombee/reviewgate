@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { buildDiff, parseUnifiedDiff } from "../diff/parse.js";
@@ -74,6 +75,7 @@ export class NodeGitClient implements GitClient {
     filePath: string,
     side: "old" | "new",
     scope: ReviewScope,
+    opts: DiffOptions = {},
   ): Promise<string | null> {
     const info = await this.info();
 
@@ -87,7 +89,9 @@ export class NodeGitClient implements GitClient {
 
     const rev =
       side === "new"
-        ? ":" // the index
+        ? opts.tree && scope !== "range"
+          ? `${opts.tree}:`
+          : ":" // the index
         : scope === "amend"
           ? info.hasHead
             ? "HEAD~1:"
@@ -101,6 +105,32 @@ export class NodeGitClient implements GitClient {
       okCodes: [0, 128],
     });
     return res.code === 0 ? res.stdout : null;
+  }
+
+  async stagedTree(steps: readonly (readonly string[])[], cwd: string): Promise<string> {
+    const info = await this.info();
+    const { stdout: liveIndex } = await runGit(["rev-parse", "--git-path", "index"], {
+      cwd: this.cwd,
+    });
+    const scratch = path.join(info.gitDir, "reviewgate", `index-${randomUUID()}`);
+    await fs.mkdir(path.dirname(scratch), { recursive: true });
+
+    try {
+      try {
+        await fs.copyFile(path.resolve(this.cwd, liveIndex.trim()), scratch);
+      } catch (err) {
+        // A repo that never staged anything has no index yet; git starts from empty.
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      }
+
+      const env = { ...process.env, GIT_INDEX_FILE: scratch };
+      for (const step of steps) await runGit(step, { cwd, env });
+      const { stdout } = await runGit(["write-tree"], { cwd: this.cwd, env });
+      return stdout.trim();
+    } finally {
+      await fs.rm(scratch, { force: true });
+      await fs.rm(`${scratch}.lock`, { force: true });
+    }
   }
 
   async untrackedFiles(opts: DiffOptions = {}): Promise<DiffFile[]> {
@@ -141,6 +171,7 @@ export class NodeGitClient implements GitClient {
 
     switch (scope) {
       case "staged":
+        if (opts.tree) return [...base, info.hasHead ? "HEAD" : EMPTY_TREE, opts.tree];
         return info.hasHead
           ? [...base, "--cached"]
           : [...base, "--cached", EMPTY_TREE];
@@ -149,6 +180,9 @@ export class NodeGitClient implements GitClient {
         // that belongs to `git add -A && git commit` (§2).
         return info.hasHead ? [...base, "HEAD"] : [...base, "--cached", EMPTY_TREE];
       case "amend":
+        if (opts.tree) {
+          return [...base, info.hasHead ? await this.#amendBase() : EMPTY_TREE, opts.tree];
+        }
         return info.hasHead
           ? [...base, "--cached", await this.#amendBase()]
           : [...base, "--cached", EMPTY_TREE];
